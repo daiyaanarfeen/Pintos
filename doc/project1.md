@@ -3,10 +3,10 @@ Design Document for Project 1: Threads
 
 ## Group Members
 
-* Daiyaan LastName <email@domain.example>
-* Patrick Lu <email@domain.example>
-* Claire Liu <email@domain.example>
-* Qiaowei Zhang <email@domain.example>
+* Mohammad Arfeen <daiyaanarfeen@berkeley.edu>
+* Xingyu Lu <xingyulu0701@berkeley.edu>
+* Claire Liu <liuzmin@berkeley.edu>
+* Qiaowei Zhang <qiaowei@berkeley.edu>
 
 
 ## Tast 1 Efficient Alarm Clock
@@ -41,10 +41,10 @@ Our `wait_list` keeps a list of threads that are blocked (sleeping), and it is o
 When `timer_interrupt()` is called, it simply goes through the `wait_list` and pop off all the threads whose `wake_up_tick` has past. Since the wait_list is ordered by `wake_up_tick`, we can traverse from the front of the list until the latest thread to be woken up. It should also call `thread_unblock()` to actually wake them up.
 
 ### Synchronization
-#### wait_list
-This list is shared among all threads and the scheduler. As list manipulation is not thread-safe in pintos, we decided to add a `wait_list_lock` to make sure no two entities are messing with the list at the same time.
-In particular, when a thread calls `timer_sleep()`, it should use `lock_acquire()` to acquire `wait_list_lock`, add itself to the `wait_list`, use `lock_release()` to release `wait_list_lock`, and finally call `thread_block()`. `timer_interrupt()` also needs to check if a lock is held, but it should not try to acquire the lock; instead, it should disable interrupts while accessing the list.
-Lastly, there is an edge case where the thread might be interrupted before it blocks itself, but after adding itself to the list. This is fortunately easy to check by `timer_interrupt()`, which should only unblock a thread if it has been blocked.
+#### 	wait_list
+	This list is shared among all threads and the scheduler. As list manipulation is not thread-safe in pintos, we decided to add a `wait_list_lock` to make sure no two entities are messing with the list at the same time.
+	In particular, when a thread calls `timer_sleep()`, it should use `lock_acquire()` to acquire `wait_list_lock`, add itself to the `wait_list`, use `lock_release()` to release `wait_list_lock`, and finally call `thread_block()`. `timer_interrupt()` also needs to check if a lock is held, but it should not try to acquire the lock; instead, it should disable interrupts while accessing the list.
+	Lastly, there is an edge case where the thread might be interrupted before it blocks itself, but after adding itself to the list. This is fortunately easy to check by `timer_interrupt()`, which should only unblock a thread if it has been blocked.
 
 ### Rationale
 Our biggest design decision is to create a variable for indicating when to wake up a thread. At first our vanilla solution was to simply store the `tick` variable passed into `timer_sleep` directly in the thread, but it turned out that updating this value for all the threads would be extremely inefficient. Instead, we realized that we could calculate the global tick the thread should reach before it is unblocked, and so we decided to use `wake_up_tick`. This way, we do not have to tediously update each thread’s wait time at every tick.
