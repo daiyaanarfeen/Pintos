@@ -152,17 +152,18 @@ Conceptual wise, this task is also quite straightforward: we make updates to `re
 #### 2. MLFQS Scheduler
 timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
 ------------|------|------|------|------|------|------|--------------
- 0          |      |      |      |      |      |      |
- 4          |      |      |      |      |      |      |
- 8          |      |      |      |      |      |      |
-12          |      |      |      |      |      |      |
-16          |      |      |      |      |      |      |
-20          |      |      |      |      |      |      |
-24          |      |      |      |      |      |      |
-28          |      |      |      |      |      |      |
-32          |      |      |      |      |      |      |
-36          |      |      |      |      |      |      |
+ 0          |  0   |  0   |  0   |  63  |  61  |  59  |     A
+ 4          |  4   |  0   |  0   |  62  |  61  |  59  |     A
+ 8          |  8   |  0   |  0   |  61  |  61  |  59  |     A
+12          |  12  |  0   |  0   |  60  |  61  |  59  |     B
+16          |  12  |  4   |  0   |  60  |  60  |  59  |     A
+20          |  16  |  4   |  0   |  59  |  60  |  59  |     B
+24          |  16  |  8   |  0   |  59  |  59  |  59  |     A
+28          |  20  |  8   |  0   |  58  |  59  |  59  |     B
+32          |  20  |  12  |  0   |  58  |  58  |  59  |     C
+36          |  20  |  12  |  4   |  58  |  58  |  58  |     A
 
 
 #### 3. Resolve Ambiguities
 
+Yes, the ambiguties occurs when there are several threads at same priority. We alphabetically choose the next thread to run to resolve this problem.
