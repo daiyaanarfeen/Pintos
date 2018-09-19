@@ -37,20 +37,24 @@ static struct lock wait_list_lock;
 ```
 
 ### 2. Algorithm
-Our `wait_list` keeps a list of threads that are blocked (sleeping), and it is ordered by `wake_up_tick`. When `timer_sleep()` is called, the thread should calculates the `wake_up_tick`, which is time (in terms of the number of ticks since the OS is booted) when it should be woken up. Then, it adds itself (lock issue explained in the next section) to the `wait_list`, using `list_insert_ordered()` so it is placed at the appropriate place on the list. Finally, it blocks itself using `thread_block()`.</br>
-Every time `timer_interrupt()` is called, it simply goes through the `wait_list` and pops off all the threads whose `wake_up_tick` has past. Since the wait_list is ordered by `wake_up_tick`, we can traverse from the front of the list until the latest thread that needs to be woken up. It should call `thread_unblock()` to actually wake them up.
+Our `wait_list` keeps a list of threads that are blocked (sleeping), and it is ordered by `wake_up_tick`. When `timer_sleep()` is called, the thread should calculate the `wake_up_tick`, which is time (in terms of the number of ticks since the OS is booted) when it should be woken up. Then, it adds itself (lock issue explained in the next section) to the `wait_list`, using `list_insert_ordered()` so it is placed at the appropriate place on the list. Finally, it blocks itself using `thread_block()`.<br/>
+When `timer_interrupt()` is called, it simply goes through the `wait_list` and pops off all the threads whose `wake_up_tick` has past. Since the wait_list is ordered by `wake_up_tick`, we can traverse from the front of the list until the latest thread to be woken up. It should also call `thread_unblock()` to actually wake them up.
 
 ### 3. Synchronization
-- wait_list</br>
-This list is shared among all threads and the scheduler. As list manipulation is not thread-safe in pintos, we decide to add a `wait_list_lock` to make sure no two entities are messing with the list at the same time.</br>
-In particular, when a thread calls `timer_sleep()`, it should use `lock_acquire()` to acquire `wait_list_lock`, add itself to the `wait_list`, use `lock_release()` to release `wait_list_lock`, and finally call `thread_block()`. `timer_interrupt()` also needs to check if a lock is held, but it should not try to acquire the lock; instead, it should disable interrupts while accessing the list.</br>
-Lastly, there is an edge case where the thread might be interrupted before it blocks itself, however after adding itself to the list. Fortunately, it is easy to check via `timer_interrupt()`, which should only unblock a thread if it has been blocked.
+- `wait_list`<br/>
+This list is shared among all threads and the scheduler. As list manipulation is not thread-safe in pintos, we decided to add a `wait_list_lock` to make sure no two entities are messing with the list at the same time. <br/>
+In particular, when a thread calls `timer_sleep()`, it should use `lock_acquire()` to acquire `wait_list_lock`, add itself to the `wait_list`, use `lock_release()` to release `wait_list_lock`, and finally call `thread_block()`. `timer_interrupt()` also needs to check if a lock is held, but it should not try to acquire the lock; instead, it should disable interrupts while accessing the list. <br/>
+Lastly, there is an edge case where the thread might be interrupted before it blocks itself, but after adding itself to the list. This is fortunately easy to check by `timer_interrupt()`, which should only unblock a thread if it has been blocked.
 
 ### 4. Rationale
 Our biggest design decision is to create a variable for indicating **what time** to wake up a thread, which is to use `wake_up_tick`. At first our vanilla solution was to simply store the `tick` variable passed into `timer_sleep` directly in the thread, but it turned out that updating this value for all the threads would be extremely inefficient. Instead, we realized that we could calculate the global tick the thread should reach before it is unblocked, and so we decided to use `wake_up_tick`. This way, we do not have to tediously update each thread’s wait time at every tick.</br>
-Another issue we pondered upon was whether the use of `wait_list_lock` would cause `timer_interrupt()` to not sleep on time, for that it might need to wait for another thread to finish inserting itself to `wait_list`. This wait time turned out to be inevitable, since multiple threads absolutely should not mess with the same list, especially a sorted list.</br>
-In terms of conceptualization, this task is not very difficult, and so the idea boils down to inserting threads into a queue to wait for being woken up. In terms of coding, as we do not need to change many functions, it should be fairly clean.</br>
-Lastly, the features implemented for this task is orthogonal to the other two tasks, and by its nature independent of most other parts of the OS, so we expect that it will not impact new features to add in the future, unless those features directly relate to this task.</br>
+
+Another issue we pondered upon was whether the use of `wait_list_lock` would cause `timer_interrupt()` to not wake up threads on time, as it might need to wait for another thread to finish inserting itself into `wait_list`. We realized that this wait time is inevitable, for otherwise `timer_interrupt()` may mess around with the list (e.g. popping off elements off `wait_list`), leaving the thread that is inserting itself into `wait_list` with invalid pointers.<br/>
+
+In terms of conceptualization, this task is not very difficult, and so the idea boils down to inserting threads into a queue to wait for being woken up. In terms of coding, as we do not need to change many functions, it should not be too messy either.<br/>
+
+Lastly, the features implemented for this task is orthogonal to the other two tasks, and by its nature independent of most other parts of the OS, so we expect that it would not be too difficult to accommodate new features, unless those features directly relate to this task.
+
 
 ## Task 3 MLFQS
 ### 1. Data structure and functions
@@ -130,12 +134,19 @@ This value is updated in `thread_tick` and `next_thread_to_run`. In `thread_tick
 
 
 ### 3. Synchronization
-Everything happens inside `timer_interrupt()`, which runs in an external interrupt context, so there will not be synchronization issues.
+- `recent_cpu`, `load_avg`, `effective_priority` <br/>
+The updates to these values happen inside `timer_interrupt()`, which runs in an external interrupt context, so there will not be synchronization issues. 
 
+- `PRIORITY_QUEUE`<br/>
+This list of lists is accessed by both `timer_interrupt()` and `schedule()`. As we disable interrupts for both functions, there will not be syncrhonization issues as each update to `PRIORITY_QUEUE` will be completeed without interruption.  
 
 ### 4. Rationale
 Our biggest decision was where to put all the updates. Putting it inside `timer_interrupt()` ended up being the most natural choice, as it is run in an external interrupt context and it is where we keep track of the ticks. We are concerned that this may make `timer_interrupt` too slow, so we moved all the computation to `thread_tick()`, which takes place after we unblock threads (task 1).
-Seeing that `recent_cpu` only changes every second for ready threads, we decided to update their priorities every second, after re-computations of `load_average` and `recent_cpu`.
+Seeing that `recent_cpu` only changes every second for ready threads, we decided to update their priorities every second, after re-computations of `load_average` and `recent_cpu`. 
+
+Our next design choice was to represent the 64 priority levels. We had two ideas: using a list of lists to represent 64 priority bins, or using two lists to represent the threads with the highest priority (list 1) and other threads (list 2). We considered the first idea better, as all operations to the list require constant time, including moving a thread to a new priority bin, finding the next thread to schedule. We decided to include an integer `queue_first_index` that points to the highest priority bin to achieve this constant runtime. 
+
+Conceptual wise, this task is also quite straightforward: we make updates to `recent_cpu`, `load_avg`, and `effective_priority` at the appropriate ticks, and shift the threads around priority bins. Making sure `queue_first_index` is always correct may require some carefulness, but the rest of coding should not be too challenging.
 
 
 ## Additional Question
