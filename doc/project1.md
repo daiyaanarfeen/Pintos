@@ -72,18 +72,15 @@ struct thread{
 ```
 - In threads/thread.c
 ```
-/* The number of priority queues we have */
-#define QUEUE_SIZE 64
-
+/* The priority lists for holding threads ready to run, sorted by their priority */
+#define LIST_SIZE 64
+static struct list priority_list[QUEUE_SIZE];
  
-/* The priority queues for holding threads ready to run */
-static struct list priority_queue[QUEUE_SIZE];
- 
-/* This index keeps track of the first non-empty list in priority_queue */
-static int queue_first_index;
+/* This index keeps track of the first non-empty list in priority_list */
+static int priority_index;
  
 /* The number of threads in the ready queue */
-static int ready_threads;
+static int total_ready_threads;
  
 /* Load average */
 static fixed_point_t load_average;
@@ -91,10 +88,10 @@ static fixed_point_t load_average;
 /* This function will be modified to initialize the new fields in thread */
 struct void init_thread(struct thread *t, const char *name, int priority);
  
-/* This function is modified to initialize load_average, queue_index, ready_threads, and the lists in priority_queue;
+/* This function is modified to initialize load_average, priority_index, total_ready_threads, and the lists in priority_list;
 void thread_init(void);
  
-/* The following functions are slightly modified to increment/decrement ready_threads when appropriate*/
+/* The following functions are slightly modified to increment/decrement total_ready_threads when appropriate*/
 void thread_unblock(struct thread *t);
 void thread_block(void);
 void thread_exit(void);
@@ -105,7 +102,7 @@ static struct thread *next_thread_to_run(void);
 /* This function is modified to update values including recent_cpu, load_aveage, and threads’ effective priorities*/
 void thread_tick(void);
  
-/* These functions will be implements to set/get the respective values of a thread */
+/* These functions will be implemented to set/get the respective values of a thread */
 void thread_set_nice (int nice);
 void thread_set_recent_cpu(int recent_cpu);
 int thread_get_nice(void);
@@ -121,32 +118,32 @@ This is a field initialized with the thread, and can be set again using `thread_
 
 - Finding the next thread to run
 
-Using `queue_first_index`, we can get the non-empty list of ready threads with the highest priority, and treat that list as `ready_list` to run the threads in it. We set `queue_first_index` to `-1` if there are not any ready threads, in which case we would run idle_thread.
+Using `priority_index`, we can get the non-empty list of ready threads with the highest priority, and treat that list as `ready_list` to run the threads in it. We set `priority_index` to `-1` if there are not any ready threads, in which case we would run idle_thread.
 
 - Updating `recent_cpu`, `load_average`, and thread `effective_priority`
 
-All of these are performed in `thread_tick()`. At every tick, we increment the current thread’s `recent_cpu`; at every 4 ticks (checking if ticks is divisible by 4), we recompute the current thread’s priority, clamping it between `PRI_MIN` and `PRI_MAX`; at every `TIMER_FREQ`, we update the `load_average` (global value, updated using `ready_threads`), then `recent_cpu`, and finally `effective_priority` of each thread.
-Lastly, we move threads around `priority_queue` based on their new priority values.
+All of these are performed in `thread_tick()`. At every tick, we increment the current thread’s `recent_cpu`; at every 4 ticks (checking if ticks is divisible by 4), we recompute the current thread’s priority, clamping it between `PRI_MIN` and `PRI_MAX`; at every `TIMER_FREQ`, we update the `load_average` (global value, updated using `total_ready_threads`), then `recent_cpu`, and finally `effective_priority` of each thread.
+Lastly, we move threads around `priority_list` based on their new priority values.
 
-- Updating `queue_first_index`.
+- Updating `priority_index`.
 
-This value is updated in `thread_tick` and `next_thread_to_run`. In `thread_tick`, `queue_first_index` may be changed if we move threads into new `priority_queue` lists, and this can be updated on-the-fly; in `next_thread_to_run`, if the list pointed to by `queue_first_index` is empty after we run a thread, we decrement `queue_first_index` until it finds the next non-empty list or reaches -1.
+This value is updated in `thread_tick` and `next_thread_to_run`. In `thread_tick`, `priority_index` may be changed if we move threads into new lists in `priority_list` , and this can be updated on-the-fly; in `next_thread_to_run`, if the list pointed to by `priority_index` is empty after we run a thread, we decrement `priority_index` until it finds the next non-empty list or reaches -1.
 
 
 ### 3. Synchronization
 - `recent_cpu`, `load_avg`, `effective_priority` <br/>
 The updates to these values happen inside `timer_interrupt()`, which runs in an external interrupt context, so there will not be synchronization issues. 
 
-- `PRIORITY_QUEUE`<br/>
-This list of lists is accessed by both `timer_interrupt()` and `schedule()`. As we disable interrupts for both functions, there will not be syncrhonization issues as each update to `PRIORITY_QUEUE` will be completeed without interruption.  
+- `priority_list`<br/>
+This list of lists is accessed by both `timer_interrupt()` and `schedule()`. As we disable interrupts for both functions, there will not be syncrhonization issues as each update to `priority_list` will be completeed without interruption.  
 
 ### 4. Rationale
 Our biggest decision was where to put all the updates. Putting it inside `timer_interrupt()` ended up being the most natural choice, as it is run in an external interrupt context and it is where we keep track of the ticks. We are concerned that this may make `timer_interrupt` too slow, so we moved all the computation to `thread_tick()`, which takes place after we unblock threads (task 1).
 Seeing that `recent_cpu` only changes every second for ready threads, we decided to update their priorities every second, after re-computations of `load_average` and `recent_cpu`. 
 
-Our next design choice was to represent the 64 priority levels. We had two ideas: using a list of lists to represent 64 priority bins, or using two lists to represent the threads with the highest priority (list 1) and other threads (list 2). We considered the first idea better, as all operations to the list require constant time, including moving a thread to a new priority bin, finding the next thread to schedule. We decided to include an integer `queue_first_index` that points to the highest priority bin to achieve this constant runtime. 
+Our next design choice was to represent the 64 priority levels. We had two ideas: using a list of lists to represent 64 priority bins, or using two lists to represent the threads with the highest priority (list 1) and other threads (list 2). We considered the first idea better, as all operations to the list require constant time, including moving a thread to a new priority bin, finding the next thread to schedule. We decided to include an integer `priority_index` that points to the highest priority bin to achieve this constant runtime. 
 
-Conceptual wise, this task is also quite straightforward: we make updates to `recent_cpu`, `load_avg`, and `effective_priority` at the appropriate ticks, and shift the threads around priority bins. Making sure `queue_first_index` is always correct may require some carefulness, but the rest of coding should not be too challenging.
+Conceptual wise, this task is also quite straightforward: we make updates to `recent_cpu`, `load_avg`, and `effective_priority` at the appropriate ticks, and shift the threads around priority bins. Making sure `priority_index` is always correct may require some carefulness, but the rest of coding should not be too challenging.
 
 
 ## Additional Question
