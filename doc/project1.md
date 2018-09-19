@@ -11,7 +11,7 @@ Design Document for Project 1: Threads
 
 ## Tast 1 Efficient Alarm Clock
 ### 1. Data structure and functions
-In threads/thread.h:
+- In threads/thread.h:
 ```
 struct thread
 {
@@ -23,12 +23,12 @@ struct thread
 	…
 }
 ```
-In threads/thread.c:
+- In threads/thread.c:
 ```
 /* This function will be modified to initialize the new fields above */
 struct void init_thread(struct thread *t, const char *name, int priority);
 ```
-In devices/timer.c:
+- In devices/timer.c:
 ```
 /* A wait list of sleeping threads to be woken up, ordered by wake_up_tick*/
 static struct list wait_list;
@@ -41,7 +41,7 @@ Our `wait_list` keeps a list of threads that are blocked (sleeping), and it is o
 When `timer_interrupt()` is called, it simply goes through the `wait_list` and pop off all the threads whose `wake_up_tick` has past. Since the wait_list is ordered by `wake_up_tick`, we can traverse from the front of the list until the latest thread to be woken up. It should also call `thread_unblock()` to actually wake them up.
 
 ### 3. Synchronization
-####   - wait_list
+- wait_list
 This list is shared among all threads and the scheduler. As list manipulation is not thread-safe in pintos, we decided to add a `wait_list_lock` to make sure no two entities are messing with the list at the same time.
 In particular, when a thread calls `timer_sleep()`, it should use `lock_acquire()` to acquire `wait_list_lock`, add itself to the `wait_list`, use `lock_release()` to release `wait_list_lock`, and finally call `thread_block()`. `timer_interrupt()` also needs to check if a lock is held, but it should not try to acquire the lock; instead, it should disable interrupts while accessing the list.
 Lastly, there is an edge case where the thread might be interrupted before it blocks itself, but after adding itself to the list. This is fortunately easy to check by `timer_interrupt()`, which should only unblock a thread if it has been blocked.
@@ -54,7 +54,7 @@ Lastly, the features implemented for this task is orthogonal to the other two ta
 
 ## Task 3 MLFQS
 ### 1. Data structure and functions
-In threads/thread.h
+- In threads/thread.h
 ```
 /* We add two additional fields to thread */
 struct thread{
@@ -66,7 +66,7 @@ struct thread{
 	…
    	 }
 ```
-In threads/thread.c
+- In threads/thread.c
 ```
 /* The number of priority queues we have */
 #define QUEUE_SIZE 64
@@ -139,9 +139,9 @@ Seeing that `recent_cpu` only changes every second for ready threads, we decided
 
 
 ## Additional Question
-### 1. Test for Bugs
+#### 1. Test for Bugs
 
-### MLFQS Scheduler
+#### 2. MLFQS Scheduler
 timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
 ------------|------|------|------|------|------|------|--------------
  0          |      |      |      |      |      |      |
@@ -156,5 +156,5 @@ timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
 36          |      |      |      |      |      |      |
 
 
-### Resolve Ambiguities
+#### 3. Resolve Ambiguities
 
