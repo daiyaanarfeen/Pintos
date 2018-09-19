@@ -54,7 +54,7 @@ Lastly, the features implemented for this task is orthogonal to the other two ta
 
 ## Task 3 MLFQS
 ### 1. Data structure and functions
-1. In threads/thread.h
+In threads/thread.h
 ```
 /* We add two additional fields to thread */
 struct thread{
@@ -66,7 +66,7 @@ struct thread{
 	…
    	 }
 ```
-2. In threads/thread.c
+In threads/thread.c
 ```
 /* The number of priority queues we have */
 #define QUEUE_SIZE 64
@@ -112,16 +112,20 @@ int thread_get_recent_cpu(void);
 
 ### 2. Algorithm
 - Niceness
+
 This is a field initialized with the thread, and can be set again using `thread_set_nice();`
 
 - Finding the next thread to run
+
 Using `queue_first_index`, we can get the non-empty list of ready threads with the highest priority, and treat that list as `ready_list` to run the threads in it. We set `queue_first_index` to `-1` if there are not any ready threads, in which case we would run idle_thread.
 
 - Updating `recent_cpu`, `load_average`, and thread `effective_priority`
+
 All of these are performed in `thread_tick()`. At every tick, we increment the current thread’s `recent_cpu`; at every 4 ticks (checking if ticks is divisible by 4), we recompute the current thread’s priority, clamping it between `PRI_MIN` and `PRI_MAX`; at every `TIMER_FREQ`, we update the `load_average` (global value, updated using `ready_threads`), then `recent_cpu`, and finally `effective_priority` of each thread.
 Lastly, we move threads around `priority_queue` based on their new priority values.
 
 - Updating `queue_first_index`.
+
 This value is updated in `thread_tick` and `next_thread_to_run`. In `thread_tick`, `queue_first_index` may be changed if we move threads into new `priority_queue` lists, and this can be updated on-the-fly; in `next_thread_to_run`, if the list pointed to by `queue_first_index` is empty after we run a thread, we decrement `queue_first_index` until it finds the next non-empty list or reaches -1.
 
 
