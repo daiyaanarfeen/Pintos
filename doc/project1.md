@@ -148,6 +148,9 @@ Conceptual wise, this task is also quite straightforward: we make updates to `re
 
 ## Additional Question
 #### 1. Test for Bugs
+**Test Setup**: Suppose there are four threads: T1 with base priority 1, T2 with base priority 2, T3 with base priority 3, T4 with base priority 4 and there are two locks L1, L2. Now T1 `lock_acquire` L1, T2 `lock_acquie` L2; thus, T1 has L1, T2 has L2. Then, T2 `lock_acquire` L1, T3 `lock_acquire` L1, and T4 `lock_acquire` L2. In other words, T2 and T3 are both waiting for L1 which is held by T1 and T3 is waiting for L2 which is held by T1. Then, When T0 `lock_release` L1, print the number of the thread which gets L1 next?</br>
+**Expected Output**: Since T4 is waiting for L2 which T2 holds, T4 would donate priority to T2. As a result, T2 has base priority 2 but effective priority 4. When T1 `lock_release` L1, which calls `sema_up`, among L1's waitlist T2 has higher effective priority(4) than T3(3). T2 should acquire L1 and **T2** will be printed.</br>
+**Actual Output/ Proof of Bug**: Since `sema_up` looks at base priority rather than effective priority and T3 has higher base priority than T2, T3 actually acquires L1 and **T3** will be printed.</br>
 
 #### 2. MLFQS Scheduler
 timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
