@@ -56,6 +56,87 @@ In terms of conceptualization, this task is not very difficult, and so the idea 
 Lastly, the features implemented for this task is orthogonal to the other two tasks, and by its nature independent of most other parts of the OS, so we expect that it would not be too difficult to accommodate new features, unless those features directly relate to this task.
 
 
+## Task 2 Priority Scheduler
+### 1. Data structure and functions
+- In threads/thread.h:
+```
+struct thread
+{
+…
+/* The effective priority and the original priority */
+fixed_point_t effective_priority;
+fixed_point_t original_priority; /*We convert the original int value into fixed_point_t*/
+ 
+/* This holds a pointer to the thread it is waiting for to acquire a lock. */
+struct thread * blocking_thread;
+ 
+/* The list of threads that are waiting for this thread to release a lock. */
+struct list waiting_threads;
+…
+}
+```
+- In threads/thread.c:
+```
+/* This function will be modified to initialize the new fields above */
+struct void init_thread(struct thread *t, const char *name, int priority);
+ 
+/* This function will be modified to select the thread with the highest effective priority */
+static struct thread *next_thread_to_run(void);
+ 
+/* These functions will be modified to get/set the current thread’s effective priority */
+void thread_set_priority(int new priority); /* Should yield the thread when appropriate */
+void thread_get_priority(void);
+```
+- In threads/synch.c:
+```
+/* These functions will be modified to select the waiting thread with the highest effective priority */
+void sema_up(struct semaphore *sema);
+void cond_signal(struct condition *cond, struct lock *lock UNUSED);
+ 
+/* This function will be modified to perform priority donation */
+void lock_acquire(struct lock *lock);
+void lock_try_acquire(struct lock *lock);
+ 
+/* This function will be modified to select the waiting thread with the highest effective priority; additionally, it should revert priority donation associated with the lock */
+void lock_release(void);
+ ```
+### 2. Algorithm
+#### 1) Choosing next thread to run
+This is performed in next_thread_to_run(). Instead of using pop_list_front() to choose the next thread from ready_list, it should use list_max() to select the thread with the highest effective priority.
+#### 2) Acquiring a lock
+When a thread T acquires a lock, it should first check if the lock is being held by another thread. This check is completed by calling lock_try_acquire().</br>
+In the case when the lock is being held by another thread T1, we set T’s blocking_thread to T1, and we add T to T1’s waiting_threads. Lastly, we perform priority donation, recursively:
+- **Base case**: T’s effective_priority is not bigger than T1’s effective_priority, so we stop;
+- **Recursive step**: we set T1’s effective_priority to be the max of T’s effective_priority and T1’s effective_priority; then, if T1 also has a blocking_thread, then we recurse on T1 and its blocking_thread. </br>
+After T (the original thread) acquires the lock, we reset T’s blocking_thread to null, and add all of the lock’s waiters (lock->semaphore->waiters) to T’s waiting_threads. For each waiter, we also change its blocking_thread to T. 
+#### 3) Releasing a lock
+When a thread releases a lock, it should iterate through the waiters of that lock by calling lock->semaphore->waiters, and it should remove each waiter from its waiting_threads. Then, it should iterate through waiting_threads, and its priority should be the max of its original priority and the effective priorities of all the threads in waiting_threads.
+#### 4) Computing effective_priority
+By default this is set to original_priority. Updates to this value only happen in lock_acquire and lock_release, and so the computations have been detailed in the previous two parts.
+#### 5) Priority scheduling for semaphores and locks, and conditional variables
+Since scheduling happens in sema_up(), we should just use list_max() instead of list_pop_front() to select the thread with the highest effective priority.
+#### 6) Changing thread’s priority
+Since we use effective_priority to perform the actual scheduling, all on-demand changes to a thread’s priority can be performed by calling thread_set_priority. Note that when part 4) happens, the thread’s priority also changes.
+
+### 3. Synchronization
+#### 1) waiting_threads
+This list is accessed both by the thread owning this list and the threads in the list. In particular, during lock_release(), the thread removes elements from its own waiting_threads. During lock_acquire(), there are two stages: the thread first waits for the lock, so it adds itself the lock holder’s waiting_threads; after it actually acquires the lock, the thread removes itself from the lock’s previous holder’s waiting_threads, and add the lock’s waiters to its own waiting_threads.</br>
+
+The first scenario when two threads might be acting on the same waiting_threads is when they both call lock_acquire on the same lock at the same time (one gets interrupted in the middle, for instance). We propose two ways to solve this: first is to turn interrupt off for operations that change waiting_threads, as most of these operations are very quick (adding one item to the list); second is to create a lock on each thread’s list, and thread must acquire the lock to change waiting_threads. Our concern for the first approach is that it might not be fast enough, and our concern for the second approach is that we are creating locks for acquiring locks, which makes everything very complicated. We decided to go for the first way for now, since that is straightforward to implement and conceptually clean.</br>
+
+The second scenario when there may be concurrency issue is when a thread calls lock_release and gets interrupted by another thread. We make sure to turn interrupt off when we set lock’s holder to NULL and call sema_up() to make sure two operations always happen consecutively (this should be super fast since sema_up() already turns interrupt off). As long as these two operations are tied together, any other interrupting threads that call lock_acquire on the same lock will not be confused, since lock->holder always correctly reflects the holder of the lock. </br>
+
+Apart from this, no two threads will ever be mutating the same waiting_threads at the same time, since the lock has to be released first and then acquired, and the lock cannot be simultaneously acquired by multiple threads.</br>
+#### 2) waiters
+Our algorithm does not make any additional changes to the elements in waiters. Additionally, accesses to waiters is also regulated by the lock-releasing and lock-acquiring, which involves the use of sema_down() and sema_up() that prevent synchronization issues.
+
+### 4. Rationale
+Our central idea is to add an “effective_priority” attribute to the thread struct. When we schedule, we use “effective priority” instead of the base priority, and change the value when priority donation happens or reverts.</br>
+To keep track of the priority donations, we considered a number of implementations. The first implementation we were considering doing consisted of adding new fields in the thread struct for “wanted_lock” and “acquired_locks”, which would contain lock pointers consistent with their names. After discussing this implementation with a TA, we were told that issues related to deallocation of locks could cause kernel panics; so we completely re-thought our implementation. </br>
+As a result, we designed an algorithm that would have the least dependency on the locks themselves. The only way to keep track of all the  donations without using the locks as intermediaries was to directly keep track of thread-to-thread relations. Since a thread can only donate to one other thread at a time, we added a “blocking_thread” attribute to the thread struct; this would ensure that we could keep track of the donation relationship, and update it when appropriate. We added a “waiting_threads” attribute to the thread struct so that when a thread releases a lock (and potentially still has other locks) it can correctly compute its new effective priority. </br>
+Our implementation is complicated, in a sense, because it has multiple moving parts; this might cause issues that are difficult to debug but will ensure that the thread’s do not fail for any reason due to the locks. Our implementation also has high overhead for lock_release and lock_acquire as it has to delete threads from the original holder’s waiting_threads as well as add threads to the new holder’s waiting_threads. We are currently planning to turn off interrupt to prevent synchronization errors, but if this turns out to be non-ideal we will look into locking shared resources using semaphores. 
+
+
 ## Task 3 MLFQS
 ### 1. Data structure and functions
 - In threads/thread.h
