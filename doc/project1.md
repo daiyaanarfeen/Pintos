@@ -155,7 +155,7 @@ struct thread{
 ```
 /* The priority lists for holding threads ready to run, sorted by their priority */
 #define LIST_SIZE 64
-static struct list priority_list[QUEUE_SIZE];
+static struct list priority_list[LIST_SIZE];
  
 /* This index keeps track of the first non-empty list in priority_list */
 static int priority_index;
