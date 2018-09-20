@@ -9,7 +9,7 @@ Design Document for Project 1: Threads
 * Qiaowei Zhang <qiaowei@berkeley.edu>
 
 
-## Tast 1 Efficient Alarm Clock
+## Task 1 Efficient Alarm Clock
 ### 1. Data structure and functions
 - In threads/thread.h:
 ```
