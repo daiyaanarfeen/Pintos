@@ -256,4 +256,4 @@ timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
 
 #### 3. Resolve Ambiguities
 
-Yes, the ambiguties occurs when there are several threads at same priority. We alphabetically choose the next thread to run to resolve this problem for this problem. In our actual code, we will enforce a FIFO rule, since all of our priority bins are lists that behave like queues. 
+Yes, the ambiguties occurs when there are several threads at same priority. We alphabetically choose the next thread to run to resolve the ambiguity for this problem. In our actual code, we will enforce a FIFO rule, since all of our priority bins are lists that behave like queues. 
