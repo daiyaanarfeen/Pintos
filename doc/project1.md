@@ -37,7 +37,7 @@ static struct lock wait_list_lock;
 ```
 
 ### 2. Algorithm
-Our `wait_list` keeps a list of threads that are blocked (sleeping), and it is ordered by `wake_up_tick`. When `timer_sleep()` is called, the thread should calculate the `wake_up_tick`, which is time (in terms of the number of ticks since the OS is booted) when it should be woken up. Then, it adds itself (lock issue explained in the next section) to the `wait_list`, using `list_insert_ordered()` so it is placed at the appropriate place on the list. Finally, it blocks itself using `thread_block()`.<br/>
+Our `wait_list` keeps a list of threads that are blocked (sleeping), and it is ordered by `wake_up_tick`. When `timer_sleep()` is called, the thread should calculate the `wake_up_tick`, which is time (in terms of the **number of ticks** since the OS is booted) when it should be woken up. Then, it adds itself (lock issue explained in the next section) to the `wait_list`, using `list_insert_ordered()` so it is placed at the **right place** on the list. Finally, it blocks itself using `thread_block()`.<br/>
 When `timer_interrupt()` is called, it simply goes through the `wait_list` and pops off all the threads whose `wake_up_tick` has past. Since the wait_list is ordered by `wake_up_tick`, we can traverse from the front of the list until the latest thread to be woken up. It should also call `thread_unblock()` to actually wake them up.
 
 ### 3. Synchronization
@@ -121,11 +121,11 @@ This is a field initialized with the thread, and can be set again using `thread_
 
 - Finding the next thread to run
 
-Using `priority_index`, we can get the non-empty list of ready threads with the highest priority, and treat that list as `ready_list` to run the threads in it. We set `priority_index` to `-1` if there are not any ready threads, in which case we would run idle_thread.
+Using `priority_index`, we can get the non-empty list of **ready threads with the highest priority**, and treat that list as `ready_list` to run the threads in it. We set `priority_index` to `-1` if there are not any ready threads, in which case we would run idle_thread.
 
 - Updating `recent_cpu`, `load_average`, and thread `effective_priority`
 
-All of these are performed in `thread_tick()`. At every tick, we increment the current thread’s `recent_cpu`, and add it to `active_threads` if it is not already in it; at every 4 ticks (checking if `ticks` is divisible by 4), we recompute priorities of all threads in active_threads, clamping them between `PRI_MIN` and `PRI_MAX`, and then reset `active_threads` by popping off all elements in it; at every `TIMER_FREQ`, we update the `load_average` (global value, updated using `total_ready_threads`), then `recent_cpu`, and finally `effective_priority` of each thread.
+All of these are performed in `thread_tick()`. At **every tick**, we increment the **current thread’s `recent_cpu`**, and add it to `active_threads` if it is not already in it; at **every 4 ticks** (checking if `ticks` is divisible by 4), we recompute **priorities of all threads in active_threads**, clamping them between `PRI_MIN` and `PRI_MAX`, and then reset `active_threads` by popping off all elements in it; at **every `TIMER_FREQ`**, we update the **`load_average`** (global value, updated using `total_ready_threads`), then **`recent_cpu`**, and finally **`effective_priority`** of **each thread**.
 Lastly, we move threads around `priority_list` based on their new priority values.
 
 - Updating `priority_index`.
@@ -135,13 +135,13 @@ This value is updated in `thread_tick` and `next_thread_to_run`. In `thread_tick
 
 ### 3. Synchronization
 - `recent_cpu`, `load_avg`, `effective_priority` <br/>
-The updates to these values happen inside `timer_interrupt()`, which runs in an external interrupt context, so there will not be synchronization issues. 
+The updates to these values happen inside `timer_interrupt()`, which runs in an **external** interrupt context, so there will **not** be synchronization issues. 
 
 - `priority_list`<br/>
-This list of lists is accessed by both `timer_interrupt()` and `schedule()`. As we disable interrupts for both functions, there will not be syncrhonization issues as each update to `priority_list` will be completeed without interruption.  
+This list of lists is accessed by both `timer_interrupt()` and `schedule()`. As we disable interrupts for both functions, there will **not** be syncrhonization issues as each update to `priority_list` will be completeed without interruption.  
 
 ### 4. Rationale
-Our biggest decision was where to put all the updates. Putting it inside `timer_interrupt()` ended up being the most natural choice, as it is run in an external interrupt context and it is where we keep track of the ticks. We are concerned that this may make `timer_interrupt` too slow, so we moved all the computation to `thread_tick()`, which takes place after we unblock threads (task 1).
+Our biggest decision was **where** to put all the updates. Putting it inside `timer_interrupt()` ended up being the most natural choice, as it is run in an external interrupt context and it is where we keep track of the ticks. We were concerned that this may make `timer_interrupt` too slow, so we moved all the computation to `thread_tick()`, which takes place after we unblock threads (task 1).
 
 Our next challenge was to keep track of all the threads between 4 ticks, since their priorities need to be updated every 4 ticks. Originally we would only update the priority of the thread that is running when `tick % 4 == 0`, but that ignored the cases when a thread is switched out for any reason before running for `TIME_SLICE` ticks. 
 
