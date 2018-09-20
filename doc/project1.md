@@ -90,7 +90,10 @@ struct void init_thread(struct thread *t, const char *name, int priority);
  
 /* This function is modified to initialize load_average, priority_index, total_ready_threads, and the lists in priority_list;
 void thread_init(void);
- 
+
+/* The list of treads that have run in the past 4 ticks */
+static struct list active_threads;
+
 /* The following functions are slightly modified to increment/decrement total_ready_threads when appropriate*/
 void thread_unblock(struct thread *t);
 void thread_block(void);
@@ -122,7 +125,7 @@ Using `priority_index`, we can get the non-empty list of ready threads with the 
 
 - Updating `recent_cpu`, `load_average`, and thread `effective_priority`
 
-All of these are performed in `thread_tick()`. At every tick, we increment the current thread’s `recent_cpu`; at every 4 ticks (checking if ticks is divisible by 4), we recompute the current thread’s priority, clamping it between `PRI_MIN` and `PRI_MAX`; at every `TIMER_FREQ`, we update the `load_average` (global value, updated using `total_ready_threads`), then `recent_cpu`, and finally `effective_priority` of each thread.
+All of these are performed in `thread_tick()`. At every tick, we increment the current thread’s `recent_cpu`, and add it to `active_threads` if it is not already in it; at every 4 ticks (checking if `ticks` is divisible by 4), we recompute priorities of all threads in active_threads, clamping them between `PRI_MIN` and `PRI_MAX`, and then reset `active_threads` by popping off all elements in it; at every `TIMER_FREQ`, we update the `load_average` (global value, updated using `total_ready_threads`), then `recent_cpu`, and finally `effective_priority` of each thread.
 Lastly, we move threads around `priority_list` based on their new priority values.
 
 - Updating `priority_index`.
@@ -139,7 +142,10 @@ This list of lists is accessed by both `timer_interrupt()` and `schedule()`. As 
 
 ### 4. Rationale
 Our biggest decision was where to put all the updates. Putting it inside `timer_interrupt()` ended up being the most natural choice, as it is run in an external interrupt context and it is where we keep track of the ticks. We are concerned that this may make `timer_interrupt` too slow, so we moved all the computation to `thread_tick()`, which takes place after we unblock threads (task 1).
-Seeing that `recent_cpu` only changes every second for ready threads, we decided to update their priorities every second, after re-computations of `load_average` and `recent_cpu`. 
+
+Our next challenge was to keep track of all the threads between 4 ticks, since their priorities need to be updated every 4 ticks. Originally we would only update the priority of the thread that is running when `tick % 4 == 0`, but that ignored the cases when a thread is switched out for any reason before running for `TIME_SLICE` ticks. 
+
+Seeing that `recent_cpu` only changes every second for ready threads, we decided to update their priorities every second, after re-computations of `load_average` and `recent_cpu`.  This way we could save a lot of computation time and reduce the time spent in `thread_tick()`.
 
 Our next design choice was to represent the 64 priority levels. We had two ideas: using a list of lists to represent 64 priority bins, or using two lists to represent the threads with the highest priority (list 1) and other threads (list 2). We considered the first idea better, as all operations to the list require constant time, including moving a thread to a new priority bin, finding the next thread to schedule. We decided to include an integer `priority_index` that points to the highest priority bin to achieve this constant runtime. 
 
