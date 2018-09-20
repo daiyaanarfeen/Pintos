@@ -116,7 +116,7 @@ By default this is set to `original_priority`. Updates to this value only happen
 #### 5) Priority scheduling for semaphores and locks, and conditional variables
 Since scheduling happens in `sema_up()`, we should just use `list_max()` instead of `list_pop_front()` to select the thread with the highest effective priority.
 #### 6) Changing thread’s priority
-Since we use `effective_priority` to perform the actual scheduling, all on-demand changes to a thread’s priority can be performed by calling `thread_set_priority`. Note that when part 4) happens, the thread’s priority also changes.
+Since we use `effective_priority` to perform the actual scheduling, all on-demand changes to a thread’s priority (and `effective_priority`) can be performed by calling `thread_set_priority`. Note that when part 4) happens, the thread’s `effective_priority` also changes. We make sure to call `thread_yield()` when the thread no longer has the highest priority, by checking the `ready_list` when its priority decreases.
 
 ### 3. Synchronization
 #### 1) `waiting_threads`
