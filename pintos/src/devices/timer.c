@@ -98,7 +98,7 @@ timer_elapsed (int64_t then)
 bool compare_wake_up_tick(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux) {
   struct thread* first = list_entry(a, struct thread, elem);
   struct thread* second = list_entry(b, struct thread, elem);
-  return first->wake_up_tick > second->wake_up_tick;  
+  return first->wake_up_tick < second->wake_up_tick;  
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
@@ -114,7 +114,7 @@ timer_sleep (int64_t ticks)
   
   ASSERT (intr_get_level () == INTR_ON);
 
-  printf("%d", ticks);
+  //printf("%d", ticks);
   /* while (timer_elapsed (start) < ticks)
     thread_yield (); */
   if (ticks > 0) {
@@ -124,9 +124,9 @@ timer_sleep (int64_t ticks)
     list_insert_ordered(&wait_list, &cur->elem, compare_wake_up_tick, NULL);
     lock_release(&wait_list_lock);
     old_level = intr_disable();
-    printf("blocking\n");
+    //printf("blocking\n");
     thread_block();
-    printf("reverting\n");
+    //printf("reverting\n");
     intr_set_level(old_level);
   }
 }
