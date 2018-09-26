@@ -36,6 +36,8 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+bool compare_wake_up_tick(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux); 
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -93,10 +95,10 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-int compare_wake_up_tick(struct list_elem* a, struct list_elem* b, UNUSED void* aux) {
+bool compare_wake_up_tick(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux) {
   struct thread* first = list_entry(a, struct thread, elem);
   struct thread* second = list_entry(b, struct thread, elem);
-  return first->wake_up_tick - second->wake_up_tick;  
+  return first->wake_up_tick > second->wake_up_tick;  
 }
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
@@ -108,21 +110,24 @@ timer_sleep (int64_t ticks)
 
   enum intr_level old_level;
   
+  struct thread* cur;
+  
   ASSERT (intr_get_level () == INTR_ON);
 
+  printf("%d", ticks);
   /* while (timer_elapsed (start) < ticks)
     thread_yield (); */
   if (ticks > 0) {
-    struct thread* cur = thread_current();
+    cur = thread_current();
     cur -> wake_up_tick = start + ticks;
     lock_acquire(&wait_list_lock);
     list_insert_ordered(&wait_list, &cur->elem, compare_wake_up_tick, NULL);
     lock_release(&wait_list_lock);
-    //old_level = intr_disable();
+    old_level = intr_disable();
     printf("blocking\n");
     thread_block();
     printf("reverting\n");
-    //intr_set_level(old_level);
+    intr_set_level(old_level);
   }
 }
 
@@ -200,13 +205,12 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  struct list_elem* e;
+  struct thread* t; 
   ticks++;
   thread_tick ();
-  if (!wait_list_lock.holder) {
-    struct list_elem* e;
-    struct thread* t; 
+  if (!wait_list_lock.holder) { 
     while (!list_empty(&wait_list)) {
-      printf("reached\n");
       e = list_pop_front(&wait_list);
       t = list_entry(e, struct thread, elem);
       if (t->wake_up_tick <= ticks) {
@@ -214,10 +218,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
           thread_unblock(t);
         }
       } else {
+        list_insert_ordered(&wait_list, &t->elem, compare_wake_up_tick, NULL);
         break;
       }
     }
-    printf("exiting\n"); 
   }
 }
 
