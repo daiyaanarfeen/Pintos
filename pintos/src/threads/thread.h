@@ -96,7 +96,7 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     /* Niceness value for calculating thread priority*/
-    fixed_point_t niceness;
+    int niceness;
     /* recent_cpu value */
     fixed_point_t recent_cpu;
 
