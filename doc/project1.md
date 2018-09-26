@@ -154,31 +154,33 @@ struct thread{
 - In threads/thread.c
 ```
 /* The priority lists for holding threads ready to run, sorted by their priority */
-#define LIST_SIZE 64
-static struct list priority_list[LIST_SIZE];
+#define QUEUE_SIZE 64
+static struct list priority_list[QUEUE_SIZE];
  
 /* This index keeps track of the first non-empty list in priority_list */
 static int priority_index;
  
-/* The number of threads in the ready queue */
-static int total_ready_threads;
- 
 /* Load average */
 static fixed_point_t load_average;
- 
-/* This function will be modified to initialize the new fields in thread */
-struct void init_thread(struct thread *t, const char *name, int priority);
- 
-/* This function is modified to initialize load_average, priority_index, total_ready_threads, and the lists in priority_list;
-void thread_init(void);
 
 /* The list of treads that have run in the past 4 ticks */
 static struct list active_threads;
 
-/* The following functions are slightly modified to increment/decrement total_ready_threads when appropriate*/
-void thread_unblock(struct thread *t);
-void thread_block(void);
-void thread_exit(void);
+
+
+/* This function returns the number of threads in the ready queue */
+int total_ready_threads(void);
+ 
+/* This function updates load_average */
+void update_load_avg(void);
+
+
+
+/* This function will be modified to initialize the new fields in thread */
+void thread_init(void);
+
+/* This function is modified to initialize load_average, priority_index, total_ready_threads, and the lists in priority_list;
+struct void init_thread(struct thread *t, const char *name, int priority);
  
 /* This function is modified to run the threads in the list with the highest priority*/
 static struct thread *next_thread_to_run(void);
