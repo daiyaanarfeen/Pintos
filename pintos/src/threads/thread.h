@@ -95,6 +95,11 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    /* Niceness value for calculating thread priority*/
+    fixed_point_t niceness;
+    /* recent_cpu value */
+    fixed_point_t recent_cpu;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

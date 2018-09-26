@@ -20,6 +20,22 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+/* The priority lists for holding threads ready to run, sorted by thread priority */
+#define LIST_SIZE 64;
+static struct list priority_list[LIST_SIZE];
+
+/* This index keeps track of the first non-empty list in priority_list */
+static int priority_index;
+
+/* The number of threads in the ready queue */
+static int total_ready_threads;
+
+/* Load average */
+static fixed_point_t load_average;
+
+/* The list of treads that have run in the past 4 ticks */
+static struct list active_threads;
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -98,6 +114,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  load_average = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -137,6 +154,8 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+
+  /* increment current thread's recent_cpu */
 }
 
 /* Prints thread statistics. */
@@ -350,6 +369,8 @@ void
 thread_set_nice (int nice UNUSED)
 {
   /* Not yet implemented. */
+  struct thread * curr = thread_current();
+  curr->niceness = nice;
 }
 
 /* Returns the current thread's nice value. */
@@ -357,7 +378,8 @@ int
 thread_get_nice (void)
 {
   /* Not yet implemented. */
-  return 0;
+  struct thread * curr = thread_current();
+  return curr->niceness;
 }
 
 /* Returns 100 times the system load average. */
@@ -365,7 +387,7 @@ int
 thread_get_load_avg (void)
 {
   /* Not yet implemented. */
-  return 0;
+  return load_average * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -373,7 +395,8 @@ int
 thread_get_recent_cpu (void)
 {
   /* Not yet implemented. */
-  return 0;
+  struct thread * curr = thread_current();
+  return curr->recent_cpu * 100;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -463,6 +486,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  if (strcmp(name, "main") == 0){
+    t->niceness = 0;
+  } else {
+    t->niceness = thread_get_nice();
+  }
+  t->recent_cpu = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
