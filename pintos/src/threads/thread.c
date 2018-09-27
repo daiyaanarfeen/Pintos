@@ -22,6 +22,8 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+#define max(a,b) (a>b?a:b)
+
 /* The priority lists for holding threads ready to run, sorted by thread priority */
 #define QUEUE_SIZE 64
 static struct list priority_list[QUEUE_SIZE];
@@ -29,8 +31,8 @@ static struct list priority_list[QUEUE_SIZE];
 /* The list of treads that have run in the past 4 ticks */
 static struct list active_threads;
 
-/* This index keeps track of the first non-empty list in priority_list 
-static int priority_index;*/
+/* This index keeps track of the first non-empty list in priority_list */
+static int priority_index;
 
 /* Load average */
 static fixed_point_t load_average;
@@ -99,14 +101,6 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
-
-void init_priority_list(void);
-void update_priority_list(struct thread* t, void * aux UNUSED);
-void calculate_load_avg(void);
-void calculate_recent_cpu(struct thread* t);
-void check_priority_bound(struct thread *t);
-void calculate_thread_priority(struct thread *t);
-void update_active_thread(struct thread *t, void * aux UNUSED);
 
 void
 init_priority_list(void)
@@ -199,23 +193,31 @@ calculate_thread_priority(struct thread *t)
 void
 update_priority_list(struct thread * t, void * aux UNUSED)
 {
+    // TODO: potential null pointer
   list_remove(&t->elem);
   calculate_thread_priority(t);
   list_push_back (& priority_list[t->priority], & t->elem);
-  list_push_back (& priority_list[t->priority], & t->elem);
+  priority_index = max(priority_index, t->priority);
+//  list_push_back (& priority_list[t->priority], & t->elem);
 }
 
 void
-update_active_thread(struct thread *t, void * aux UNUSED) {
+add_to_active_thread(struct thread *t) {
   struct list_elem *e;
   for (e = list_begin (&active_threads); e != list_end (&active_threads);
        e = list_next (e))
   {
     struct thread *node = list_entry (e, struct thread, elem);
+    // TODO: correct way of finding equality?
     if (node == t) {return ;}
   }
   list_push_back(&active_threads, &t->elem);
-  update_priority_list(t, NULL);
+//  update_priority_list(t, NULL);
+}
+
+void
+reset_active_thread(void){
+    list_init(& active_threads);
 }
 
 /***************    ***************/
@@ -240,19 +242,25 @@ thread_tick (void)
 
   /* increment current thread's recent_cpu */
   if (thread_mlfqs) {
-    // every tick
+    // every tick, increment current thread's recent_cpu
     if (t != idle_thread) {
       t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
-      update_active_thread(t, NULL);
+      add_to_active_thread(t);
     }
     // every 4 ticks, update priority of all threads in active_thread
-//    if (timer_ticks() % TIME_SLICE == 0){
-//
-//    }
-    // every second
+    if (timer_ticks() % TIME_SLICE == 0){
+        struct list_elem *e;
+        for (e = list_begin (&active_threads); e != list_end (&active_threads);
+             e = list_next (e))
+        {
+            struct thread *node = list_entry (e, struct thread, elem);
+            calculate_thread_priority(node);
+        }
+        reset_active_thread();
+    }
+    // every TIMER_FREQ
     if (timer_ticks() % TIMER_FREQ == 0) {
       calculate_load_avg();
-//      thread_foreach((thread_action_func *)calculate_recent_cpu, (void *)NULL);
       thread_foreach((thread_action_func *)update_priority_list, (void *)NULL);
     }
   }
@@ -644,13 +652,23 @@ static struct thread *
 next_thread_to_run (void)
 {
   if (thread_mlfqs) {
-    int i;
-    for (i = QUEUE_SIZE - 1; i >= 0; i--) {
-      if (list_size(&priority_list[i]) != 0) {
-        return list_entry (list_pop_front (&priority_list[i]), struct thread, elem);
-      } 
-    }
-    return idle_thread;
+      if (priority_index > -1){
+          // TODO: READY LIST DIDNT CHANGE since we pop from priority_list
+        struct thread *next_thread = list_entry(list_pop_front(&priority_list[priority_index]), struct thread, elem);
+        while (list_size(&priority_list[priority_index]) == 0 && priority_index >= 0 ){
+            priority_index --;
+        }
+        return next_thread;
+      }
+      return idle_thread;
+
+//    int i;
+//    for (i = QUEUE_SIZE - 1; i >= 0; i--) {
+//      if (list_size(&priority_list[i]) != 0) {
+//        return list_entry (list_pop_front (&priority_list[i]), struct thread, elem);
+//      }
+//    }
+//    return idle_thread;
 
   } else {
     if (list_empty (&ready_list))

@@ -118,6 +118,15 @@ extern bool thread_mlfqs;
 void thread_init (void);
 void thread_start (void);
 
+void init_priority_list(void);
+void update_priority_list(struct thread* t, void * aux UNUSED);
+void calculate_load_avg(void);
+void calculate_recent_cpu(struct thread* t);
+void check_priority_bound(struct thread *t);
+void calculate_thread_priority(struct thread *t);
+void add_to_active_thread(struct thread *t);
+void reset_active_thread(void);
+
 void thread_tick (void);
 void thread_print_stats (void);
 
