@@ -28,6 +28,9 @@
 #define QUEUE_SIZE 64
 static struct list priority_list[QUEUE_SIZE];
 
+/* The number of threads in the ready queue */
+static int total_ready_threads;
+
 /* The list of treads that have run in the past 4 ticks */
 static struct list active_threads;
 
@@ -350,6 +353,9 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+  if (thread_mlfqs){
+      total_ready_threads --;
+  }
   schedule ();
 }
 
@@ -373,6 +379,9 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+  if (thread_mlfqs){
+      total_ready_threads ++;
+  }
 }
 
 /* Returns the name of the running thread. */
@@ -430,6 +439,9 @@ thread_exit (void)
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
+  if (thread_mlfqs){
+      total_ready_threads --;
+  }
   NOT_REACHED ();
 }
 
@@ -617,9 +629,11 @@ init_thread (struct thread *t, const char *name, int priority)
     if (strcmp(name, "main") == 0){
         t->niceness = 0;
         t->recent_cpu = fix_int(0);
+        total_ready_threads = 1;
     } else {
         t->niceness = thread_get_nice();
         t->recent_cpu = fix_int(thread_get_recent_cpu());
+        total_ready_threads ++;
     }
     calculate_thread_priority(t);
     list_push_back(&priority_list[t->priority], &t->elem);
