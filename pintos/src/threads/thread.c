@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 
@@ -100,18 +101,18 @@ static tid_t allocate_tid (void);
    finishes. */
 
 void init_priority_list(void);
-void update_priority_list(struct thread* t);
+void update_priority_list(struct thread* t, void * aux UNUSED);
 void calculate_load_avg(void);
 void calculate_recent_cpu(struct thread* t);
 void check_priority_bound(struct thread *t);
 void calculate_thread_priority(struct thread *t);
-void update_active_thread(struct thread *t);
+void update_active_thread(struct thread *t, void * aux UNUSED);
 
 void
 init_priority_list(void)
 {
   int i;
-  for (i = 0; i <= QUEUE_SIZE; i++) {
+  for (i = 0; i < QUEUE_SIZE; i++) {
     struct list thread_list;
     list_init(& thread_list);
     priority_list[i] = thread_list;
@@ -137,11 +138,7 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
   /* initize load average */
-  if (thread_mlfqs) {
-    load_average = fix_int(0);
-    initial_thread->niceness = 0;
-    initial_thread->recent_cpu = fix_int(0);
-  }
+  load_average = fix_int(0);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -194,21 +191,22 @@ calculate_thread_priority(struct thread *t)
   t->priority = fix_trunc(
                 fix_sub(fix_sub(fix_int(PRI_MAX), 
                                 fix_div(t->recent_cpu, fix_int(4))), 
-                        fix_mul(fix_int(t->niceness), fix_int(4))));
+                        fix_mul(fix_int(t->niceness), fix_int(2))));
   check_priority_bound(t);
 }
 
 /*************** end of calculation ***************/
 void
-update_priority_list(struct thread * t)
+update_priority_list(struct thread * t, void * aux UNUSED)
 {
   list_remove(&t->elem);
   calculate_thread_priority(t);
   list_push_back (& priority_list[t->priority], & t->elem);
+  list_push_back (& priority_list[t->priority], & t->elem);
 }
 
 void
-update_active_thread(struct thread *t) {
+update_active_thread(struct thread *t, void * aux UNUSED) {
   struct list_elem *e;
   for (e = list_begin (&active_threads); e != list_end (&active_threads);
        e = list_next (e))
@@ -217,7 +215,7 @@ update_active_thread(struct thread *t) {
     if (node == t) {return ;}
   }
   list_push_back(&active_threads, &t->elem);
-  update_priority_list(t);
+  update_priority_list(t, NULL);
 }
 
 /***************    ***************/
@@ -242,13 +240,20 @@ thread_tick (void)
 
   /* increment current thread's recent_cpu */
   if (thread_mlfqs) {
+    // every tick
     if (t != idle_thread) {
       t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
-      update_active_thread(t);
+      update_active_thread(t, NULL);
     }
+    // every 4 ticks, update priority of all threads in active_thread
+//    if (timer_ticks() % TIME_SLICE == 0){
+//
+//    }
+    // every second
     if (timer_ticks() % TIMER_FREQ == 0) {
       calculate_load_avg();
-      thread_foreach(update_priority_list, NULL);
+//      thread_foreach((thread_action_func *)calculate_recent_cpu, (void *)NULL);
+      thread_foreach((thread_action_func *)update_priority_list, (void *)NULL);
     }
   }
 
@@ -383,6 +388,10 @@ thread_current (void)
      of stack, so a few big automatic arrays or moderate
      recursion can cause stack overflow. */
   ASSERT (is_thread (t));
+//  if (t->status != THREAD_RUNNING) {
+//      printf("debuggggg %s", t->name);
+//      printf("%d", t->status);
+//  }
   ASSERT (t->status == THREAD_RUNNING);
 
   return t;
@@ -470,14 +479,17 @@ thread_get_priority (void)
 /* Sets the current thread's nice value to NICE. */
 /* TODO: If the running thread no longer has the highest priority, it should yield the CPU.*/
 void
-thread_set_nice (int nice UNUSED)
+thread_set_nice (int nice)
 {
   ASSERT(nice <= 20);
   ASSERT(nice >= -20);
   struct thread * curr = thread_current();
   curr->niceness = nice;
-  update_priority_list(curr);
-  intr_yield_on_return ();
+  int prev_priority = curr->priority;
+  update_priority_list(curr, NULL);
+  if (curr->priority < prev_priority) {
+    intr_yield_on_return ();
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -594,8 +606,13 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /* initializate niceness value and recent cpu of current thread */
   if (thread_mlfqs) {
-    t->niceness = thread_get_nice();
-    t->recent_cpu = fix_int(thread_get_recent_cpu());
+    if (strcmp(name, "main") == 0){
+        t->niceness = 0;
+        t->recent_cpu = fix_int(0);
+    } else {
+        t->niceness = thread_get_nice();
+        t->recent_cpu = fix_int(thread_get_recent_cpu());
+    }
     calculate_thread_priority(t);
     list_push_back(&priority_list[t->priority], &t->elem);
   }
