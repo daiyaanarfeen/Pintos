@@ -162,7 +162,7 @@ calculate_load_avg(void)
 {
   load_average = fix_add(
         fix_mul(fix_div(fix_int(59), fix_int(60)), load_average), 
-        fix_div(fix_int((int) list_size(&ready_list)), fix_int(60)));
+        fix_div(fix_int((int) total_ready_threads), fix_int(60)));
 }
 
 void
