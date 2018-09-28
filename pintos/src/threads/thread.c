@@ -155,9 +155,9 @@ calculate_load_avg(void)
 {
   /* Calculate ready list num */
   int i;
-  int total = 0
+  int total = 0;
   for (i = 0; i < QUEUE_SIZE; i++) {
-    total += (int) list_size(& priority_list[i]);
+    total = total + (int) list_size(& priority_list[i]);
   }
 
   /* calculate load avg*/
@@ -254,9 +254,9 @@ thread_tick (void)
       calculate_load_avg();
       struct list_elem *ele;
       for (ele = list_begin (&all_list); ele != list_end (&all_list); ele = list_next(ele)) {
-        struct thread *ele_thread = list_entry (ele, struct thread, all_elem);
-        calculate_thread_priority(t);
-        if (t->status == THREAD_READY){
+        struct thread *ele_thread = list_entry (ele, struct thread, allelem);
+        calculate_thread_priority(ele_thread);
+        if (ele_thread->status == THREAD_READY){
           list_remove(&ele_thread->elem);
           add_to_priority_list(ele_thread);
         }
@@ -270,11 +270,11 @@ thread_tick (void)
         if (node->status == THREAD_READY) {
           list_remove(& node-> elem);
           calculate_thread_priority(node);
-          add_to_priority_list(& node);
+          add_to_priority_list(node);
         }
       }
       reset_active_thread();
-      ASSERT(list_empty(active_threads));
+      ASSERT(list_empty(&active_threads));
     }
   }
 

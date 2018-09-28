@@ -95,6 +95,7 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct list_elem active_elem;       /* Active list element */
 
     /* Niceness value for calculating thread priority*/
     int niceness;
