@@ -155,7 +155,7 @@ calculate_load_avg(void)
 {
   /* Calculate ready list num */
   int i;
-  int total = 0;
+  int total = 1;
   for (i = 0; i < QUEUE_SIZE; i++) {
     total = total + (int) list_size(& priority_list[i]);
   }
