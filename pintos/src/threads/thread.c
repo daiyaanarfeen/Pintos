@@ -161,6 +161,7 @@ calculate_load_avg(void)
   }
   
   for (i = 0; i < QUEUE_SIZE; i++) {
+    //printf("%d\n", i);
     total = total + (int) list_size(& priority_list[i]);
   }
 
@@ -204,9 +205,11 @@ calculate_thread_priority(struct thread *t)
 void
 add_to_priority_list(struct thread * t)
 {
+    enum intr_level old_level = intr_disable();
     if (t != idle_thread) {
         list_push_back(&priority_list[t->priority], &t->priority_elem);
     }
+    intr_set_level(old_level);
 }
 
 void
