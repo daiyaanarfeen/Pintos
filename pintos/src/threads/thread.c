@@ -161,7 +161,6 @@ calculate_load_avg(void)
   }
   
   for (i = 0; i < QUEUE_SIZE; i++) {
-    //printf("%d\n", i);
     total = total + (int) list_size(& priority_list[i]);
   }
 
@@ -452,6 +451,7 @@ thread_exit (void)
   intr_disable ();
   if (thread_mlfqs) {
     list_remove (&thread_current()->active_elem);
+    list_remove (&thread_current()->priority_elem);
   }
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
