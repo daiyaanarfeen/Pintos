@@ -119,7 +119,7 @@ void thread_init (void);
 void thread_start (void);
 
 void init_priority_list(void);
-void update_priority_list(struct thread* t, void * aux UNUSED);
+void add_to_priority_list(struct thread * t);
 void calculate_load_avg(void);
 void calculate_recent_cpu(struct thread* t);
 void check_priority_bound(struct thread *t);
