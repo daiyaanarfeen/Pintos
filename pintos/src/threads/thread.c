@@ -164,7 +164,7 @@ calculate_load_avg(void)
 {
   load_average = fix_add(
         fix_mul(fix_div(fix_int(59), fix_int(60)), load_average), 
-        fix_div(fix_int((int) total_ready_threads), fix_int(60)));
+        fix_div(fix_int(total_ready_threads), fix_int(60)));
 }
 
 void
@@ -202,7 +202,6 @@ void
 add_to_priority_list(struct thread * t)
 {
     if (t != idle_thread) {
-        calculate_thread_priority(t);
         list_push_back(&priority_list[t->priority], &t->elem);
         priority_index = max(priority_index, t->priority);
     }
@@ -215,11 +214,9 @@ add_to_active_thread(struct thread *t) {
        e = list_next (e))
   {
     struct thread *node = list_entry (e, struct thread, elem);
-    // TODO: correct way of finding equality?
     if (node == t) {return ;}
   }
   list_push_back(&active_threads, &t->elem);
-//  update_priority_list(t, NULL);
 }
 
 void
@@ -272,7 +269,10 @@ thread_tick (void)
       for (ele = list_begin (&all_list); ele != list_end (&all_list); ele = list_next(ele)) {
           struct thread *ele_thread = list_entry (ele, struct thread, elem);
           list_remove(&ele_thread->elem);
-          add_to_priority_list(ele_thread);
+          calculate_thread_priority(t);
+          if (t->status == THREAD_READY){
+            add_to_priority_list(ele_thread);
+          }
       }
     }
   }
@@ -362,9 +362,6 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
-  if (thread_mlfqs && running_thread () != idle_thread){
-      total_ready_threads --;
-  }
   schedule ();
 }
 
@@ -387,7 +384,6 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
 
   if (thread_mlfqs){
-      // TODO
       total_ready_threads ++;
       add_to_priority_list(t);
   } else{
@@ -448,9 +444,6 @@ thread_exit (void)
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
-  if (thread_mlfqs && running_thread () != idle_thread){
-      total_ready_threads --;
-  }
   NOT_REACHED ();
 }
 
@@ -466,9 +459,10 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (thread_mlfqs){
-      add_to_priority_list(cur);
+    total_ready_threads ++;
+    add_to_priority_list(cur);
   } else{
-      list_push_back (&ready_list, &cur->elem);
+    list_push_back (&ready_list, &cur->elem);
   }
   cur->status = THREAD_READY;
   schedule ();
@@ -643,7 +637,7 @@ init_thread (struct thread *t, const char *name, int priority)
         t->recent_cpu = fix_int(0);
     } else {
         t->niceness = running_thread()->niceness;
-        t->recent_cpu = fix_div(running_thread ()->recent_cpu, fix_int(100));
+        t->recent_cpu = running_thread ()->recent_cpu;
     }
     calculate_thread_priority(t);
     list_push_back(&priority_list[t->priority], &t->elem);
@@ -677,21 +671,14 @@ next_thread_to_run (void)
 {
   if (thread_mlfqs) {
       while (list_size(&priority_list[priority_index]) == 0 && priority_index >= 0){
-          priority_index --;
+        priority_index --;
       }
       if (priority_index >= 0){
-          return list_entry(list_pop_front(&priority_list[priority_index]), struct thread, elem);
+        total_ready_threads --;
+        return list_entry(list_pop_front(&priority_list[priority_index]), struct thread, elem);
       }
       return idle_thread;
   }
-
-//    int i;
-//    for (i = QUEUE_SIZE - 1; i >= 0; i--) {
-//      if (list_size(&priority_list[i]) != 0) {
-//        return list_entry (list_pop_front (&priority_list[i]), struct thread, elem);
-//      }
-//    }
-//    return idle_thread;
 
   else {
     if (list_empty (&ready_list))
