@@ -162,7 +162,7 @@ calculate_load_avg(void)
 
   /* calculate load avg*/
   load_average = fix_add(
-        fix_mul(fix_div(fix_int(59), fix_int(60)), load_average), 
+        fix_mul(fix_div(fix_int(59), fix_int(60)), load_average),
         fix_div(fix_int(total), fix_int(60)));
 }
 
@@ -170,7 +170,7 @@ void
 calculate_recent_cpu(struct thread *t)
 {
   t->recent_cpu = fix_add(fix_int(t->niceness),
-                          fix_mul(fix_div(fix_mul(fix_int(2), load_average), 
+                          fix_mul(fix_div(fix_mul(fix_int(2), load_average),
                                           fix_add(fix_mul(fix_int(2), load_average), fix_int(1))),
                                   t->recent_cpu));
 }
@@ -190,8 +190,8 @@ calculate_thread_priority(struct thread *t)
 {
   calculate_recent_cpu(t);
   t->priority = fix_trunc(
-                fix_sub(fix_sub(fix_int(PRI_MAX), 
-                                fix_div(t->recent_cpu, fix_int(4))), 
+                fix_sub(fix_sub(fix_int(PRI_MAX),
+                                fix_div(t->recent_cpu, fix_int(4))),
                         fix_mul(fix_int(t->niceness), fix_int(2))));
   check_priority_bound(t);
 }
