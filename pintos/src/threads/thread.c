@@ -71,7 +71,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-bool thread_mlfqs;
+bool thread_mlfqs = true;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -201,7 +201,7 @@ void
 add_to_priority_list(struct thread * t)
 {
     if (t != idle_thread) {
-        list_push_back(&priority_list[t->priority], &t->elem);
+        list_push_back(&priority_list[t->priority], &t->priority_elem);
     }
 }
 
@@ -211,7 +211,7 @@ add_to_active_thread(struct thread *t) {
   for (e = list_begin (&active_threads); e != list_end (&active_threads);
        e = list_next (e))
   {
-    struct thread *node = list_entry (e, struct thread, elem);
+    struct thread *node = list_entry (e, struct thread, active_elem);
     if (node == t) {return ;}
   }
   list_push_back(&active_threads, &t->active_elem);
@@ -257,7 +257,7 @@ thread_tick (void)
         struct thread *ele_thread = list_entry (ele, struct thread, allelem);
         calculate_thread_priority(ele_thread);
         if (ele_thread->status == THREAD_READY){
-          list_remove(&ele_thread->elem);
+          list_remove(&ele_thread->priority_elem);
           add_to_priority_list(ele_thread);
         }
       }
@@ -268,7 +268,7 @@ thread_tick (void)
       for (e = list_begin (&active_threads); e != list_end (&active_threads); e = list_next (e)) {
         struct thread *node = list_entry (e, struct thread, active_elem);
         if (node->status == THREAD_READY) {
-          list_remove(& node-> elem);
+          list_remove(& node-> priority_elem);
           calculate_thread_priority(node);
           add_to_priority_list(node);
         }
@@ -671,7 +671,7 @@ next_thread_to_run (void)
       int i;
       for (i = QUEUE_SIZE - 1; i >= 0; i--) {
         if (!list_empty (& priority_list[i])) {
-          return list_entry(list_pop_front(&priority_list[i]), struct thread, elem);
+          return list_entry(list_pop_front(&priority_list[i]), struct thread, priority_elem);
         }
       }
       return idle_thread;
