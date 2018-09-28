@@ -503,7 +503,7 @@ thread_set_priority (int new_priority)
 {
   if (!thread_mlfqs) {
     thread_current ()->priority = new_priority;
-    thread_curret ()->original_priority = new_priority;
+    thread_current ()->original_priority = new_priority;
     struct list_elem* e = list_max(&ready_list, compare_priority, NULL);
     struct thread* t = list_entry(e, struct thread, elem);
     if (thread_current()->priority < t->priority) {
@@ -645,9 +645,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
-  t->magic = THREAD_MAGIC;
   t->blocking_thread = NULL;
   list_init(&t->waiting_threads);
+  t->magic = THREAD_MAGIC;
+  
 
 
   /* initializate niceness value and recent cpu of current thread */
@@ -701,7 +702,11 @@ next_thread_to_run (void)
   else {
     if (list_empty (&ready_list))
       return idle_thread;
-    return list_entry (list_remove (list_max(&ready_list, compare_priority, NULL)), struct thread, elem);
+    struct list_elem *e;
+    e = list_max(&ready_list, compare_priority, NULL);
+    list_remove(e);
+    struct thread *t = list_entry(e, struct thread, elem);
+    return t;
   }
 }
 
