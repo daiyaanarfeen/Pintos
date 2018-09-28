@@ -503,6 +503,12 @@ thread_set_priority (int new_priority)
 {
   if (!thread_mlfqs) {
     thread_current ()->priority = new_priority;
+    thread_curret ()->original_priority = new_priority;
+    struct list_elem* e = list_max(&ready_list, compare_priority, NULL);
+    struct thread* t = list_entry(e, struct thread, elem);
+    if (thread_current()->priority < t->priority) {
+      thread_yield();
+    }
   }
 }
 
@@ -638,7 +644,10 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->original_priority = priority;
   t->magic = THREAD_MAGIC;
+  t->blocking_thread = NULL;
+  list_init(&t->waiting_threads);
 
 
   /* initializate niceness value and recent cpu of current thread */
@@ -692,7 +701,7 @@ next_thread_to_run (void)
   else {
     if (list_empty (&ready_list))
       return idle_thread;
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_remove (list_max(&ready_list, compare_priority, NULL)), struct thread, elem);
   }
 }
 
@@ -782,3 +791,10 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+bool compare_priority(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux) {
+  struct thread* first = list_entry(a, struct thread, elem);
+  struct thread* second = list_entry(b, struct thread, elem);
+  return first->priority < second->priority;
+}
+
