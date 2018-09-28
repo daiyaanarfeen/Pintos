@@ -109,10 +109,8 @@ void
 init_priority_list(void)
 {
   int i;
-  for (i = 0; i < QUEUE_SIZE; i++) {
-    struct list thread_list;
-    list_init(& thread_list);
-    priority_list[i] = thread_list;
+  for (i=0; i < QUEUE_SIZE; i++) {
+    list_init(&priority_list[i]);
   }
 }
 
@@ -131,6 +129,7 @@ thread_init (void)
       /* initize load average */
       load_average = fix_int(0);
       total_ready_threads = 0;
+      priority_index = -1;
   }
 
   /* Set up a thread structure for the running thread. */
@@ -264,14 +263,15 @@ thread_tick (void)
     }
     // every TIMER_FREQ
     if (timer_ticks() % TIMER_FREQ == 0) {
+      priority_index = -1;
       calculate_load_avg();
       struct list_elem *ele;
       for (ele = list_begin (&all_list); ele != list_end (&all_list); ele = list_next(ele)) {
           struct thread *ele_thread = list_entry (ele, struct thread, elem);
-          list_remove(&ele_thread->elem);
           calculate_thread_priority(t);
           if (t->status == THREAD_READY){
-            add_to_priority_list(ele_thread);
+              list_remove(&ele_thread->elem);
+              add_to_priority_list(ele_thread);
           }
       }
     }
@@ -362,6 +362,8 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+//  if (running_thread () != idle_thread)
+//        total_ready_threads--;
   schedule ();
 }
 
@@ -639,8 +641,9 @@ init_thread (struct thread *t, const char *name, int priority)
         t->niceness = running_thread()->niceness;
         t->recent_cpu = running_thread ()->recent_cpu;
     }
-    calculate_thread_priority(t);
+//    calculate_thread_priority(t);
     list_push_back(&priority_list[t->priority], &t->elem);
+    priority_index = max(priority_index, t->priority);
   }
 
   old_level = intr_disable ();
@@ -670,7 +673,7 @@ static struct thread *
 next_thread_to_run (void)
 {
   if (thread_mlfqs) {
-      while (list_size(&priority_list[priority_index]) == 0 && priority_index >= 0){
+      while (priority_index >= 0 && list_empty(&priority_list[priority_index])){
         priority_index --;
       }
       if (priority_index >= 0){
