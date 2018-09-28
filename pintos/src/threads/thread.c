@@ -71,7 +71,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-bool thread_mlfqs = true;
+bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -155,7 +155,11 @@ calculate_load_avg(void)
 {
   /* Calculate ready list num */
   int i;
-  int total = 1;
+  int total = 0;
+  if (thread_current () != idle_thread) {
+    total += 1;
+  }
+  
   for (i = 0; i < QUEUE_SIZE; i++) {
     total = total + (int) list_size(& priority_list[i]);
   }
@@ -219,7 +223,9 @@ add_to_active_thread(struct thread *t) {
 
 void
 reset_active_thread(void){
-    list_init(& active_threads);
+  while (!list_empty(&active_threads)) {
+    list_pop_front(&active_threads);
+  }
 }
 
 /***************    ***************/
@@ -441,6 +447,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
+  list_remove (&thread_current()->active_elem);
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -511,9 +518,9 @@ thread_set_nice (int nice)
   struct thread * curr = thread_current();
   curr->niceness = nice;
   int prev_priority = curr->priority;
-  add_to_priority_list(curr);
+  calculate_thread_priority(curr);
   if (curr->priority < prev_priority) {
-    intr_yield_on_return ();
+    thread_yield();
   }
 }
 
