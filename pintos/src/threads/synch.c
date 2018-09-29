@@ -205,7 +205,7 @@ lock_acquire (struct lock *lock)
     struct thread* blocker = lock->holder;
     struct thread* cur = thread_current();
     cur->blocking_thread = blocker;
-    list_push_back(&cur->waiting_threads, &cur->lock_waiter_elem);
+    list_push_back(&blocker->waiting_threads, &cur->lock_waiter_elem);
     while (cur->priority > blocker->priority) {
       blocker->priority = cur->priority;
       cur = blocker;
