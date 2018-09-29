@@ -274,7 +274,7 @@ lock_release (struct lock *lock)
     list_remove(&toremove->lock_waiter_elem);
     toremove->blocking_thread = toremove;
   }
-  struct thread* maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority, NULL), struct thread, lock_waiter_elem);;
+  struct thread* maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority_waiters, NULL), struct thread, lock_waiter_elem);;
   if (maxwaiter->priority > holder->original_priority) {
     holder->priority = maxwaiter->priority;
   } else {
