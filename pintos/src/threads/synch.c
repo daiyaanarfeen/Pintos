@@ -123,9 +123,13 @@ sema_up (struct semaphore *sema)
   sema->value++;
   intr_set_level (old_level);
 
+<<<<<<< HEAD
   if (thread_current()->priority < t->priority) {
     thread_yield();
   }
+=======
+  thread_yield();
+>>>>>>> a4b2f76ca4138f19524ca572b0e1dc3ce3ce392f
 }
 
 static void sema_test_helper (void *sema_);
@@ -211,7 +215,7 @@ lock_acquire (struct lock *lock)
     struct thread* blocker = lock->holder;
     struct thread* cur = thread_current();
     cur->blocking_thread = blocker;
-    list_push_back(&cur->waiting_threads, &cur->lock_waiter_elem);
+    list_push_back(&blocker->waiting_threads, &cur->lock_waiter_elem);
     while (cur->priority > blocker->priority) {
       blocker->priority = cur->priority;
       cur = blocker;
@@ -280,7 +284,11 @@ lock_release (struct lock *lock)
     list_remove(&toremove->lock_waiter_elem);
     toremove->blocking_thread = toremove;
   }
+<<<<<<< HEAD
   struct thread* maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority, NULL), struct thread, lock_waiter_elem);;
+=======
+  struct thread* maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority_waiters, NULL), struct thread, lock_waiter_elem);;
+>>>>>>> a4b2f76ca4138f19524ca572b0e1dc3ce3ce392f
   if (maxwaiter->priority > holder->original_priority) {
     holder->priority = maxwaiter->priority;
   } else {
@@ -293,6 +301,7 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
 }
 
 /* Returns true if the current thread holds LOCK, false

@@ -356,9 +356,14 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+<<<<<<< HEAD
   if (t->priority > thread_current()->priority) {
     thread_yield();
   }
+=======
+  if (thread_current()->priority < t->priority)
+    thread_yield();
+>>>>>>> a4b2f76ca4138f19524ca572b0e1dc3ce3ce392f
 
   return tid;
 }
@@ -502,14 +507,25 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+bool compare_priority_waiters(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux) {
+  struct thread* first = list_entry(a, struct thread, lock_waiter_elem);
+  struct thread* second = list_entry(b, struct thread, lock_waiter_elem);
+  return first->priority < second->priority;
+}
+
 void
 thread_set_priority (int new_priority)
 {
   if (!thread_mlfqs) {
     thread_current ()->priority = new_priority;
     thread_current ()->original_priority = new_priority;
-    struct list_elem* e = list_max(&ready_list, compare_priority, NULL);
-    struct thread* t = list_entry(e, struct thread, elem);
+    struct list_elem* e = list_max(&thread_current()->waiting_threads, compare_priority_waiters, NULL);
+    struct thread* t = list_entry(e, struct thread, lock_waiter_elem);
+    if (t->priority > thread_current()->priority)
+      thread_current()->priority = t->priority;
+    
+    e = list_max(&ready_list, compare_priority_waiters, NULL);
+    t = list_entry(e, struct thread, elem);
     if (thread_current()->priority < t->priority) {
       thread_yield();
     }
