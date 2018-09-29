@@ -272,6 +272,7 @@ lock_release (struct lock *lock)
   for (e = list_begin(waiters); e != list_end(waiters); e = list_next(e)) {
     toremove = list_entry(e, struct thread, elem);
     list_remove(&toremove->lock_waiter_elem);
+    toremove->blocking_thread = toremove;
   }
   struct thread* maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority, NULL), struct thread, lock_waiter_elem);;
   if (maxwaiter->priority > holder->original_priority) {
@@ -287,6 +288,7 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 
+  thread_yield();
 }
 
 /* Returns true if the current thread holds LOCK, false
