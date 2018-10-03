@@ -28,6 +28,10 @@
 #define QUEUE_SIZE 64
 static struct list priority_list[QUEUE_SIZE];
 
+static int num_ready;
+
+static int max_index;
+
 /* Load average */
 static fixed_point_t load_average;
 
@@ -118,6 +122,7 @@ thread_init (void)
       init_priority_list();
       /* initize load average */
       load_average = fix_int(0);
+      num_ready = 0;
   }
 
   /* Set up a thread structure for the running thread. */
@@ -149,21 +154,10 @@ thread_start (void)
 void
 calculate_load_avg(void)
 {
-  /* Calculate ready list num */
-  int i;
-  int total = 0;
-  if (thread_current () != idle_thread) {
-    total += 1;
-  }
-  
-  for (i = 0; i < QUEUE_SIZE; i++) {
-    total = total + (int) list_size(& priority_list[i]);
-  }
-
-  /* calculate load avg*/
+    /* calculate load avg*/
   load_average = fix_add(
         fix_mul(fix_div(fix_int(59), fix_int(60)), load_average),
-        fix_div(fix_int(total), fix_int(60)));
+        fix_div(fix_int(num_ready), fix_int(60)));
 }
 
 void
@@ -204,6 +198,7 @@ add_to_priority_list(struct thread * t)
     if (t != idle_thread) {
         list_push_back(&priority_list[t->priority], &t->priority_elem);
     }
+    max_index = max(max_index, t->priority);
     intr_set_level(old_level);
 }
 
@@ -232,23 +227,30 @@ thread_tick (void)
     // every tick, increment current thread's recent_cpu
     if (t != idle_thread) {
       t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
-      calculate_thread_priority(t);
+    }
+    // every 4 ticks, update priority of all threads in active_thread
+    if (timer_ticks() % 4 == 0){
+        calculate_thread_priority(t);
+        check_priority_bound(t);
     }
     // every TIMER_FREQ
     if (timer_ticks() % TIMER_FREQ == 0) {
-      calculate_load_avg();
+      load_average = fix_add(
+              fix_mul(fix_div(fix_int(59), fix_int(60)), load_average),
+              fix_div(fix_int(num_ready), fix_int(60)));
+      max_index = -1;
       struct list_elem *ele;
       for (ele = list_begin (&all_list); ele != list_end (&all_list); ele = list_next(ele)) {
         struct thread *ele_thread = list_entry (ele, struct thread, allelem);
-        calculate_recent_cpu(ele_thread);
-        calculate_thread_priority(ele_thread);
-        if (ele_thread->status == THREAD_READY){
-          list_remove(&ele_thread->priority_elem);
-          add_to_priority_list(ele_thread);
+            calculate_recent_cpu(ele_thread);
+            calculate_thread_priority(ele_thread);
+            if (ele_thread->status == THREAD_READY) {
+                list_remove(&ele_thread->priority_elem);
+                add_to_priority_list(ele_thread);
         }
       }
     }
-    // every 4 ticks, update priority of all threads in active_thread
+
   }
 
   /* Enforce preemption. */
@@ -339,6 +341,9 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+  if (running_thread() != idle_thread){
+      num_ready --;
+  }
   schedule ();
 }
 
@@ -359,13 +364,15 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  t->status = THREAD_READY;
 
   if (thread_mlfqs){
       add_to_priority_list(t);
+      num_ready ++;
   } else{
       list_push_back (&ready_list, &t->elem);
   }
-  t->status = THREAD_READY;
+
   intr_set_level (old_level);
 }
 
@@ -422,6 +429,9 @@ thread_exit (void)
   }
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
+  if (running_thread() != idle_thread){
+      num_ready --;
+  }
   schedule ();
   NOT_REACHED ();
 }
@@ -437,12 +447,12 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+  cur->status = THREAD_READY;
   if (thread_mlfqs){
     add_to_priority_list(cur);
   } else{
     list_push_back (&ready_list, &cur->elem);
   }
-  cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
@@ -668,16 +678,26 @@ static struct thread *
 next_thread_to_run (void)
 {
   if (thread_mlfqs) {
-      int i;
-      for (i = QUEUE_SIZE - 1; i >= 0; i--) {
-        if (!list_empty (& priority_list[i])) {
-          struct thread *node = list_entry(list_pop_front(&priority_list[i]), struct thread, priority_elem);
-          if (node->status == THREAD_READY) {
+//      int i;
+//      for (i = QUEUE_SIZE - 1; i >= 0; i--) {
+//        if (!list_empty (& priority_list[i])) {
+//          struct thread *node = list_entry(list_pop_front(&priority_list[i]), struct thread, priority_elem);
+//          if (node->status == THREAD_READY) {
+//            return node;
+//          }
+//        }
+//      }
+//      return idle_thread;
+    while (max_index >= 0 && list_empty(&priority_list[max_index])){
+        max_index --;
+    }
+    if (max_index >= 0){
+        struct thread *node = list_entry(list_pop_front(&priority_list[max_index]), struct thread, priority_elem);
+        if (node->status == THREAD_READY) {
             return node;
           }
-        }
-      }
-      return idle_thread;
+    }
+    return idle_thread;
   }
 
   else {
