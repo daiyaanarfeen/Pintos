@@ -320,6 +320,9 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  if (t->priority > thread_current()->priority) {
+    thread_yield();
+  }
   return tid;
 }
 
@@ -462,11 +465,27 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+bool compare_priority_waiters(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux) {
+  struct thread* first = list_entry(a, struct thread, lock_waiter_elem);
+  struct thread* second = list_entry(b, struct thread, lock_waiter_elem);
+  return first->priority < second->priority;
+}
+
 void
 thread_set_priority (int new_priority)
 {
   if (!thread_mlfqs) {
     thread_current ()->priority = new_priority;
+    thread_current ()->original_priority = new_priority;
+    struct list_elem* e = list_max(&thread_current()->waiting_threads, compare_priority_waiters, NULL);
+    struct thread* t = list_entry(e, struct thread, lock_waiter_elem);
+    if (t->priority > thread_current()->priority)
+      thread_current()->priority = t->priority;
+    
+    e = list_max(&ready_list, compare_priority_waiters, NULL);
+    t = list_entry(e, struct thread, elem);
+    
+    thread_yield();
   }
 }
 
@@ -603,7 +622,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->original_priority = priority;
+  t->blocking_thread = t;
+  list_init(&t->waiting_threads);
   t->magic = THREAD_MAGIC;
+  
 
 
   /* initializate niceness value and recent cpu of current thread */
@@ -660,7 +683,11 @@ next_thread_to_run (void)
   else {
     if (list_empty (&ready_list))
       return idle_thread;
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    struct list_elem *e;
+    e = list_max(&ready_list, compare_priority, NULL);
+    list_remove(e);
+    struct thread *t = list_entry(e, struct thread, elem);
+    return t;
   }
 }
 
@@ -750,3 +777,10 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+bool compare_priority(const struct list_elem* a, const struct list_elem* b, UNUSED void* aux) {
+  struct thread* first = list_entry(a, struct thread, elem);
+  struct thread* second = list_entry(b, struct thread, elem);
+  return first->priority < second->priority;
+}
+
