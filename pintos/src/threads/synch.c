@@ -201,6 +201,11 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  if (thread_mlfqs){
+      sema_down(&lock->semaphore);
+      lock-> holder = thread_current();
+      return ;
+  }
 
   bool success = lock_try_acquire(lock);
   if (!success) {
@@ -261,37 +266,35 @@ lock_try_acquire (struct lock *lock)
    make sense to try to release a lock within an interrupt
    handler. */
 void
-lock_release (struct lock *lock)
-{
-  ASSERT (lock != NULL);
-  ASSERT (lock_held_by_current_thread (lock));
+lock_release (struct lock *lock) {
+  ASSERT(lock != NULL);
+  ASSERT(lock_held_by_current_thread(lock));
+  if (!thread_mlfqs) {
+    enum intr_level old_level = intr_disable();
 
-  enum intr_level old_level = intr_disable();
+    struct thread *holder = thread_current();
+    struct list *waiters = &lock->semaphore.waiters;
+    struct list_elem *e;
 
-  struct thread* holder = thread_current();
-  struct list* waiters = &lock->semaphore.waiters;
-  struct list_elem* e;
+    struct thread *toremove;
+    for (e = list_begin(waiters); e != list_end(waiters); e = list_next(e)) {
+        toremove = list_entry(e,
+        struct thread, elem);
+        list_remove(&toremove->lock_waiter_elem);
+        toremove->blocking_thread = toremove;
+    }
+    struct thread *maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority_waiters, NULL),
+    struct thread, lock_waiter_elem);
+    if (maxwaiter->priority > holder->original_priority) {
+        holder->priority = maxwaiter->priority;
+    } else {
+        holder->priority = holder->original_priority;
+    }
 
-  struct thread* toremove;
-  for (e = list_begin(waiters); e != list_end(waiters); e = list_next(e)) {
-    toremove = list_entry(e, struct thread, elem);
-    list_remove(&toremove->lock_waiter_elem);
-    toremove->blocking_thread = toremove;
+    intr_set_level(old_level);
   }
-  struct thread* maxwaiter = list_entry(list_max(&holder->waiting_threads, compare_priority_waiters, NULL), struct thread, lock_waiter_elem);
-  if (maxwaiter->priority > holder->original_priority) {
-    holder->priority = maxwaiter->priority;
-  } else {
-    holder->priority = holder->original_priority;
-  }
-
-  
-  intr_set_level(old_level);
-
-
   lock->holder = NULL;
   sema_up (&lock->semaphore);
-
 }
 
 /* Returns true if the current thread holds LOCK, false

@@ -28,8 +28,10 @@
 #define QUEUE_SIZE 64
 static struct list priority_list[QUEUE_SIZE];
 
+/* MLFQS: number of threads in READY and RUNNING status, used to calculate load avg */
 static int num_ready;
 
+/* MLFQS: highest priority of threads ready to run */
 static int max_index;
 
 /* Load average */
@@ -149,17 +151,6 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
-/*************** calculation ***************/
-
-void
-calculate_load_avg(void)
-{
-    /* calculate load avg*/
-  load_average = fix_add(
-        fix_mul(fix_div(fix_int(59), fix_int(60)), load_average),
-        fix_div(fix_int(num_ready), fix_int(60)));
-}
-
 void
 calculate_recent_cpu(struct thread *t)
 {
@@ -170,8 +161,14 @@ calculate_recent_cpu(struct thread *t)
 }
 
 void
-check_priority_bound (struct thread *t)
+calculate_thread_priority(struct thread *t)
 {
+  
+  t->priority = fix_trunc(
+                fix_sub(fix_sub(fix_int(PRI_MAX),
+                                fix_div(t->recent_cpu, fix_int(4))),
+                        fix_mul(fix_int(t->niceness), fix_int(2))));
+  /* check_priority_bound */
   if (fix_compare(fix_int(t->priority), fix_int(PRI_MIN)) == -1){
       t->priority = PRI_MIN;
   } else if (fix_compare(fix_int(t->priority), fix_int(PRI_MAX)) == 1){
@@ -180,30 +177,13 @@ check_priority_bound (struct thread *t)
 }
 
 void
-calculate_thread_priority(struct thread *t)
-{
-  
-  t->priority = fix_trunc(
-                fix_sub(fix_sub(fix_int(PRI_MAX),
-                                fix_div(t->recent_cpu, fix_int(4))),
-                        fix_mul(fix_int(t->niceness), fix_int(2))));
-  check_priority_bound(t);
-}
-
-/*************** end of calculation ***************/
-void
 add_to_priority_list(struct thread * t)
 {
-    enum intr_level old_level = intr_disable();
-    if (t != idle_thread) {
-        list_push_back(&priority_list[t->priority], &t->priority_elem);
-    }
-    max_index = max(max_index, t->priority);
-    intr_set_level(old_level);
+  if (t != idle_thread) {
+      list_push_back(&priority_list[t->priority], &t->priority_elem);
+  }
+  max_index = max(max_index, t->priority);
 }
-
-/***************    ***************/
-
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
@@ -228,10 +208,9 @@ thread_tick (void)
     if (t != idle_thread) {
       t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
     }
-    // every 4 ticks, update priority of all threads in active_thread
+    // every 4 ticks, update priority
     if (timer_ticks() % 4 == 0){
         calculate_thread_priority(t);
-        check_priority_bound(t);
     }
     // every TIMER_FREQ
     if (timer_ticks() % TIMER_FREQ == 0) {
@@ -242,15 +221,14 @@ thread_tick (void)
       struct list_elem *ele;
       for (ele = list_begin (&all_list); ele != list_end (&all_list); ele = list_next(ele)) {
         struct thread *ele_thread = list_entry (ele, struct thread, allelem);
-            calculate_recent_cpu(ele_thread);
-            calculate_thread_priority(ele_thread);
-            if (ele_thread->status == THREAD_READY) {
-                list_remove(&ele_thread->priority_elem);
-                add_to_priority_list(ele_thread);
+          calculate_recent_cpu(ele_thread);
+          calculate_thread_priority(ele_thread);
+          if (ele_thread->status == THREAD_READY) {
+            list_remove(&ele_thread->priority_elem);
+            add_to_priority_list(ele_thread);
         }
       }
     }
-
   }
 
   /* Enforce preemption. */
@@ -258,7 +236,6 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
 }
-
 
 /* Prints thread statistics. */
 void
@@ -430,7 +407,7 @@ thread_exit (void)
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   if (running_thread() != idle_thread){
-      num_ready --;
+    num_ready --;
   }
   schedule ();
   NOT_REACHED ();
@@ -507,7 +484,6 @@ thread_get_priority (void)
 }
 
 /* Sets the current thread's nice value to NICE. */
-/* TODO: If the running thread no longer has the highest priority, it should yield the CPU.*/
 void
 thread_set_nice (int nice)
 {
@@ -636,8 +612,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->blocking_thread = t;
   list_init(&t->waiting_threads);
   t->magic = THREAD_MAGIC;
-  
-
 
   /* initializate niceness value and recent cpu of current thread */
   if (thread_mlfqs) {
@@ -678,24 +652,14 @@ static struct thread *
 next_thread_to_run (void)
 {
   if (thread_mlfqs) {
-//      int i;
-//      for (i = QUEUE_SIZE - 1; i >= 0; i--) {
-//        if (!list_empty (& priority_list[i])) {
-//          struct thread *node = list_entry(list_pop_front(&priority_list[i]), struct thread, priority_elem);
-//          if (node->status == THREAD_READY) {
-//            return node;
-//          }
-//        }
-//      }
-//      return idle_thread;
     while (max_index >= 0 && list_empty(&priority_list[max_index])){
-        max_index --;
+      max_index --;
     }
     if (max_index >= 0){
-        struct thread *node = list_entry(list_pop_front(&priority_list[max_index]), struct thread, priority_elem);
-        if (node->status == THREAD_READY) {
-            return node;
-          }
+      struct thread *node = list_entry(list_pop_front(&priority_list[max_index]), struct thread, priority_elem);
+      if (node->status == THREAD_READY) {
+          return node;
+      }
     }
     return idle_thread;
   }
