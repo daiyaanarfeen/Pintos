@@ -99,12 +99,11 @@ struct thread
     int original_priority;
     struct thread* blocking_thread;
     struct list waiting_threads;
-    struct list_elem lock_waiter_elem;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    struct list_elem priority_elem;
-    struct list_elem active_elem;       /* Active list element */
+    struct list_elem priority_elem;     /* Priority List Element */
+    struct list_elem lock_waiter_elem;  /* Waiting_Threads Element */
 
     /* Niceness value for calculating thread priority*/
     int niceness;
@@ -127,15 +126,6 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
-
-void init_priority_list(void);
-void add_to_priority_list(struct thread * t);
-void calculate_load_avg(void);
-void calculate_recent_cpu(struct thread* t);
-void check_priority_bound(struct thread *t);
-void calculate_thread_priority(struct thread *t);
-void add_to_active_thread(struct thread *t);
-void reset_active_thread(void);
 
 void thread_tick (void);
 void thread_print_stats (void);
