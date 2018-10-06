@@ -20,9 +20,6 @@
 /* wait list*/
 static struct list wait_list;
 
-/* wait lock*/
-static struct lock wait_list_lock;
-
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -47,7 +44,6 @@ timer_init (void)
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 
   list_init(&wait_list);
-  lock_init(&wait_list_lock);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -114,21 +110,18 @@ timer_sleep (int64_t ticks)
   
   ASSERT (intr_get_level () == INTR_ON);
 
-  //printf("%d", ticks);
-  /* while (timer_elapsed (start) < ticks)
-    thread_yield (); */
-  if (ticks > 0) {
-    old_level = intr_disable();
-    cur = thread_current();
-    cur -> wake_up_tick = start + ticks;
-    //lock_acquire(&wait_list_lock);
-    list_insert_ordered(&wait_list, &cur->wait_list_elem, compare_wake_up_tick, NULL);
-    //lock_release(&wait_list_lock);
-    //printf("blocking\n");
-    thread_block();
-    //printf("reverting\n");
-    intr_set_level(old_level);
-  }
+  if (ticks > 0) 
+    {
+      /* Turninterrupt off while inserting the 
+      into the wait list*/
+      old_level = intr_disable();
+      cur = thread_current();
+      cur -> wake_up_tick = start + ticks;
+      list_insert_ordered(&wait_list, &cur->wait_list_elem, compare_wake_up_tick, NULL);
+      /* Block the thread to propoerly put it to sleep */
+      thread_block();
+      intr_set_level(old_level);
+    }
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -209,20 +202,28 @@ timer_interrupt (struct intr_frame *args UNUSED)
   struct thread* t; 
   ticks++;
   thread_tick ();
-  if (!wait_list_lock.holder) { 
-    while (!list_empty(&wait_list)) {
+  /* Check if any thread in the wait list is 
+  ready to be woken up */
+  while (!list_empty(&wait_list)) 
+    {
       e = list_pop_front(&wait_list);
       t = list_entry(e, struct thread, wait_list_elem);
-      if (t->wake_up_tick <= ticks) {
-        if (t->status == THREAD_BLOCKED) {
-          thread_unblock(t);
+      /* Check if we have passed the wake up tick*/
+      if (t->wake_up_tick <= ticks) 
+        {
+          if (t->status == THREAD_BLOCKED) 
+            {
+              thread_unblock(t);
+            }
+        } 
+      else 
+        {
+          /* Put the element back into the list*/
+          list_insert_ordered(&wait_list, &t->wait_list_elem, compare_wake_up_tick, NULL);
+          break;
         }
-      } else {
-        list_insert_ordered(&wait_list, &t->wait_list_elem, compare_wake_up_tick, NULL);
-        break;
-      }
     }
-  }
+  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
