@@ -12,14 +12,14 @@ Final Report for Project 1: Threads
 # Changes made and reasons
 
 ## Task 1 Efficient Alarm Clock
-For task 1, instead of keeping a lock on the list of sleeping threads, we disabled interrupts when adding to the list. This ended up being much simpler and avoided issues we were having with the task 2 bugs affecting task 1. We also added a `list_elem` to the thread struct specific to the list of sleeping threads. 
+For task 1, instead of keeping a lock on the list of sleeping threads, we disabled interrupts when adding to the list. This ended up being much simpler and avoided issues we were having with the task 2 bugs affecting task 1. We also added a `list_elem` to the thread struct specific to the list of sleeping threads. </br>
 
 ## Task 2 Priority Scheduler
-For task 2, we barely strayed at all from our initial design. We did have to add a `list_elem` in the thread struct specifically for adding to the blocking thread’s list of waiting threads. We also called `thread_yield` in `lock_release` and `thread_set_priority` to ensure the highest priority thread was always the one running. Other than these small changes the original design stands as the design we implemented. 
+For task 2, we barely strayed at all from our initial design. We did have to add a `list_elem` in the thread struct specifically for adding to the blocking thread’s list of waiting threads. We also called `thread_yield` in `lock_release` and `thread_set_priority` to ensure the highest priority thread was always the one running. Other than these small changes the original design stands as the design we implemented. </br>
 
 ## Task 3 MLFQS
-For the task 3, we followed our initial design for most part, but we removed the active_thread (which was intended for storing all running threads in the past four ticks but turned out to be unneccessary). Instead, we simply updated the priority of `thread_current` every four ticks in `thread_tick`. Our code was greatly simplified and less prune to bugs.
-In addition, we added `priority_elem` to thread struct so that we could keep track of threads in `priority_list`, which holds threads ready to run, sorted by thread priority. 
+For the task 3, we followed our initial design for most part, but we removed the active_thread (which was intended for storing all running threads in the past four ticks but turned out to be unneccessary). Instead, we simply updated the priority of `thread_current` every four ticks in `thread_tick`. Our code was greatly simplified and less prune to bugs.</br>
+In addition, we added `list_elem` to thread struct so that we could keep track of threads in `priority_list`, which holds threads ready to run, sorted by thread priority. </br>
 To reduce code duplicity, we also added helper functions : `calculate_load_average`, `calculate_recent_cpu`, `calculate_priority` and `add_to_priority_list`, since the same calculations were used in different places several times. By constructing reusable codes, we made our code simpler, improved its readability and made it easier to debug. 
 
 
