@@ -10,6 +10,29 @@ Design Document for Project 2: User Programs
 
 
 ## Task 1 Argument Passing
+### 1. Data Structure and Functions:
+
+- In userprog/process.c
+```
+/* This function will be modified to split file_name and extract argc and argv[] */
+bool load (const char *file_name, void (**eip) (void), void **esp)
+
+/* This function will be modified to load arguments to the stack. */
+static bool setup_stack (void **esp)
+```
+
+### 2. Algorithms
+In function load, we split `file_name` to get the actual file name, the argument list. We then count the number of arguments. We also make sure to null-terminate each of the arguments.
+
+In load, we push the parsed command line argument strings onto stack, starting from address `PHYS_BASE`. We push the following values in sequence: the char values of each argv, `word_align` of type `uint8\_t`, pointers to each argv, pointers to argv itself, argc, and finally return address. For each value we push, we decrement the stack pointer by the size of value to push and push the value by dereferencing the pointer. We will enforce a suitable limit on the number of arguments, though this may not be necessary.
+
+### 3. Synchronization
+ There should not be any synchronization issue, as each process operates in its own memory space, and we use single-threaded processes in Pintos. In short, there are no shared resources.
+
+### 4. Rationale
+Conceptually, this task is quite straightforward. Our goal was to parse the argument, and push the relevant items in the right order onto the stack in order for the program to correctly use them; and so we modify the corresponding functions to achieve that. 
+
+In terms of coding difficulty, it might be a little tricky to push items onto the stack in the right order; since all user processes have a lot of dependencies on this task, we need to be extra careful in order to not create sneaky bugs.
 
 ## Task 2 Process Control Syscalls
 
@@ -88,13 +111,15 @@ We check if the parent `process_bundle` exists, and if it does, we set the statu
 We first iterate through children list to check if the `process_bundle` corresponding to the pid value exists, and return -1 if it does not exist.
 Then, we call `sema_down` on the `process_bundle`’s semaphore value only if `process_bundle`'s `child_exited` is false. We then remove this `process_bundle` from children list, get its status value, and free the `process_bundle`. Lastly, we return the status value.
 
-
 - Safely access user address</br>
 We verify the validity of a user-provided pointer (as well as the whole region of memory spanning the arguments) before dereferencing it. We first check if it is a null pointer, then check if the pointer to kernel virtual address space using `is_kernel_vaddr`, and finally check if pointer to unmapped virtual memory by checking if `pagedir_get_page` returns `null`.
 
+
 ### 3. Synchronization
-For wait and exec, we decided to use the semaphores to track the order in which events should happen. Since we have one semaphore for each parent-child relationship, the problem was able to be solved in a straightforward manner: the parent down the semaphore when it waits for the child, and the child ups the semaphore when it wants to wake up the parent.<\br>
-We know that a child can up the semaphore at most twice: once after it is successfully loaded (in `start_process`), and once when it exits (in `process_exit`). For exec, this is perfectly fine: it could be woken up by any of them, and is guaranteed to be woken up since it is guaranteed to happen before any wait syscalls. For wait, there is a danger of never being woken up if the process fails loading, or if wait is called multiple times on the child process. As a result, we include an additional check, which is whether the child process has exited, to avoid putting a process into eternal sleep.<\br>
+For wait and exec, we decided to use the semaphores to track the order in which events should happen. Since we have one semaphore for each parent-child relationship, the problem was able to be solved in a straightforward manner: the parent down the semaphore when it waits for the child, and the child ups the semaphore when it wants to wake up the parent.
+
+We know that a child can up the semaphore at most twice: once after it is successfully loaded (in `start_process`), and once when it exits (in `process_exit`). For exec, this is perfectly fine: it could be woken up by any of them, and is guaranteed to be woken up since it is guaranteed to happen before any wait syscalls. For wait, there is a danger of never being woken up if the process fails loading, or if wait is called multiple times on the child process. As a result, we include an additional check, which is whether the child process has exited, to avoid putting a process into eternal sleep.
+
 Additionally, we want to make sure that there are no race conditions happening in any `process_bundle`, since multiple threads may access and modify it at the same time. As a result, we add a lock in the `process_bundle`, and a thread must acquire the lock before modifying or checking the values. 
 
 
@@ -103,7 +128,7 @@ We created `process_bundle` as a communication channel between the parent and th
 
 `Practise` and `halt` are pretty straightforward, and so we just followed the spec. For `exec`, `exit`, and `wait`, we decided to use a semaphore to allow the parent and child threads to coordinate. our key idea was to make sure that the number of `sema_up()` is always larger than that of `sema_down()`: exec calls `sema_down()` once, and `wait()` calls it an additional time. As a result, we put one `sema_up()` after successful load, and one `sema_down()` in `process_exit()`, so that a parent thread is guaranteed to wake up.
 
-Another area we focused on was when to free the `process_bundle`, and when to add/remove `process_bundle` to a process’ children list. For the former, a `process_bundle` is freed in two cases: 1. It is freed by a child process upon exit if its parent process has exited. 2. It is freed by a parent process when it calls wait() on a child process, or when it calls `exec()` and find that the child process failed loading. This way, we make sure that every `process_bundle` is freed exactly once. For managing a process’ children list, we make sure to add it exactly once upon creating the thread, and always remove it if the `process_bundle` is freed (i.e. whenever a parent frees a child `process_bundle`, iit always remove it from the children list first). 
+Another area we focused on was when to free the `process_bundle`, and when to add/remove `process_bundle` to a process’ children list. For the former, a `process_bundle` is freed in two cases: 1. It is freed by a child process upon exit if its parent process has exited. 2. It is freed by a parent process when it calls `wait()` on a child process, or when it calls `exec()` and find that the child process failed loading. This way, we make sure that every `process_bundle` is freed exactly once. For managing a process’ children list, we make sure to add it exactly once upon creating the thread, and always remove it if the `process_bundle` is freed (i.e. whenever a parent frees a child `process_bundle`, iit always remove it from the children list first). 
 
 Overall, this task’s design is quite complex, but we hope that by clearly dividing up the work between the parent process and the child process, we should be fine. When we start coding, we may realize that some parts of the design is redundant, and we will remove them as see fit.
 
@@ -188,35 +213,38 @@ We first acquire the `file_global_lock`. we go through the files list and get th
 We first acquire the `file_global_lock`. we go through the files list and get the corresponding `fs_bundle` instance if successful. We get the file instance and call `file_tell`. Finally, we release `file_global_lock`. </br>
 
 - close</br>
-We first acquire the `file_global_lock`. we go through the files list and get the corresponding `fs_bundle` instance if successful. We get the file instance and call `file_close`. Additionally, we remove the `fs_bundle` from files list. Finally, we release `file_global_lock`. </br>
+We first acquire the `file_global_lock`. we go through the files list and get the corresponding `fs_bundle` instance if successful. We get the file instance and call `file_close`. Additionally, we remove the `fs_bundle` from files list. Finally, we release `file_global_lock`. 
 
 
 ### 3. Synchronization
-Since we use a global lock on all syscalls in this task, there should not be any synchronization issues. Specifically, since this task includes all possible operations files, and they all require acquisition of the global lock, there should not be any synchronization issues. Note that this is not the most efficiency way, but it does simply the potential synchronization issues.</br>
+Since we use a global lock on all syscalls in this task, there should not be any synchronization issues. Specifically, since this task includes all possible operations files, and they all require acquisition of the global lock, there should not be any synchronization issues. Note that this is not the most efficiency way, but it does simply the potential synchronization issues.
 
 
 ### 4. Rationale
-Our biggest design choice was how to keep track of all the representations of a file: file name, file struct, and file descriptor. We ended up creating a bundle struct for it, so we can link all three representations.</br>
-Our second design choice was how to keep track of all files in a process. We initially thought about using an array of size 128, and index using the file descriptors. This approach, however, has two limitations: first one is that we cannot have more than 128 files open at the same time; second one is that managing the available file descriptors is prone to error. For these reasons, we ended up using a list, which will be slower (since we need to do list scans to find the appropriate `fs_bundle`) but easier to manager and less prone to bugs.</br>
-In terms of coding difficulty, we feel that since most of the fundamental operations have already been provided to us, this task should not be too bad. The trick is to make the operations secure: checking buffer address, file descriptor, and length of the file names etc. This is likely an area that could be more extensively tested.</br>
-Lastly, this task should be independent from the other two tasks in nature.</br>
+Our biggest design choice was how to keep track of all the representations of a file: file name, file struct, and file descriptor. We ended up creating a bundle struct for it, so we can link all three representations.
+
+Our second design choice was how to keep track of all files in a process. We initially thought about using an array of size 128, and index using the file descriptors. This approach, however, has two limitations: first one is that we cannot have more than 128 files open at the same time; second one is that managing the available file descriptors is prone to error. For these reasons, we ended up using a list, which will be slower (since we need to do list scans to find the appropriate `fs_bundle`) but easier to manager and less prone to bugs.
+
+In terms of coding difficulty, we feel that since most of the fundamental operations have already been provided to us, this task should not be too bad. The trick is to make the operations secure: checking buffer address, file descriptor, and length of the file names etc. This is likely an area that could be more extensively tested.
+
+Lastly, this task should be independent from the other two tasks in nature.
 
 
 
 ## Additional Questions
-### 1. Test name: Sc-bad-sp.c
+### 1. Test name:`sc-bad-sp.c`
 Explanation: In line 18 we moved address -(64*1024*1024) to the register esp, which is stack pointer. Then we do a system call. Since the address lies approximately 64mb below the code segment, It’s a invalid stack pointer. 
 
-### 2. Test name: sc-bad-arg.c
-Explanation: In line 14 we first move the address 0xbffffffc to the register stack pointer. Then we move a long type of register zero(which contains the value zero.) to the value of the register stack pointer, which is 0xbffffffc. Since we add a long type of value, the end of the stack pointer is now 0xc0000003. Then we do the syscall. Since our PHYS_BASE is 0xc0000000. The pointer is in kernel virtual address space, which is a invalid pointer. 
+### 2. Test name: `sc-bad-arg.c`
+Explanation: In line 14 we first move the address `0xbffffffc` to the register stack pointer. Then we move a long type of register zero(which contains the value zero.) to the value of the register stack pointer, which is `0xbffffffc`. Since we add a long type of value, the end of the stack pointer is now `0xc0000003`. Then we do the syscall. Since our `PHYS_BASE` is `0xc0000000`. The pointer is in kernel virtual address space, which is a invalid pointer. 
 
 ### 3 File Operation Syscall: remove
 Remove syscall of task 3 is not tested in the provided test cases. Since it is one of the important functionalities of the file system, we should test thoroughly this syscall. Specifically, we should test that when a file is removed, any process which has a file descriptor for that file may continue to use that descriptor. In other words, after being removed, the file will not have a name and no other processes will be able to open it. However, processes that have access to the file prior to its removal should still be able to read and write from the file, until all file descriptors referring to the file are closed or the machine shuts down.
 
 
 ### 4. GDB Questions
-1) Name of thread running the function: main</br>
-  Address of thread running the function: 0xc000e000</br>
+1) Name of thread running the function: `main`</br>
+  Address of thread running the function: `0xc000e000`</br>
 ```
 (gdb) info threads
   Id   Target Id         Frame
@@ -246,8 +274,8 @@ a->function (argv);
 /threads/init.c:133
 run_actions (argv);
 ```
-3) Name of thread running the function: args-none\000\000\000\000\000\000</br>
-Address of thread running the function: 0xc010a000</br>
+3) Name of thread running the function: `args-none\000\000\000\000\000\000`</br>
+Address of thread running the function: `0xc010a000`</br>
 ```
 (gdb) info threads
   Id   Target Id         Frame
@@ -258,12 +286,12 @@ pintos-debug: dumplist #0: 0xc000e000 {tid = 1, status = THREAD_BLOCKED, name = 
 pintos-debug: dumplist #1: 0xc0104000 {tid = 2, status = THREAD_BLOCKED, name = "idle", '\000' <repeats 11 times>, stack = 0xc0104f34 "", priority = 0, allelem = {prev = 0xc000e020, next = 0xc010a020}, elem = {prev = 0xc0034b60 <ready_list>, next = 0xc0034b68 <ready_list+8>}, pagedir = 0x0, magic = 3446325067}
 pintos-debug: dumplist #2: 0xc010a000 {tid = 3, status = THREAD_RUNNING, name = "args-none\000\000\000\000\000\000", stack = 0xc010afd4 "", priority = 31, allelem = {prev = 0xc0104020, next = 0xc0034b58 <all_list+8>}, elem = {prev = 0xc0034b60 <ready_list>, next = 0xc0034b68 <ready_list+8>}, pagedir = 0x0, magic = 3446325067}
 ```
-4) process.c:45
+4) `process.c:45`
 ```
 tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 ```
 
-5) (gdb) btpagefault
+5) `(gdb) btpagefault`
 ```
 #0  0x0804870c in ?? ()
 ```
@@ -273,4 +301,4 @@ tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 exit (main (argc, argv));
 ```
 
-7) All of our Pintos test programs start by printing out their own name (e.g. argv[0]). Since argument passing has not yet been implemented, all of these programs will crash when they access argv[0]. Until we implement argument passing, none of the user programs will work.
+7) All of our Pintos test programs start by printing out their own name (e.g. `argv[0]`). Since argument passing has not yet been implemented, all of these programs will crash when they access `argv[0]`. Until we implement argument passing, none of the user programs will work.
