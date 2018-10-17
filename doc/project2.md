@@ -11,6 +11,101 @@ Design Document for Project 2: User Programs
 
 ## Task 1 Argument Passing
 
+## Task 2 Process Control Syscalls
+
+### 1. Data structure and functions
+- In threads/thread.h
+```
+struct thread
+	{
+	...
+	#ifdef USERPROG
+	…
+	struct process_bundle *parent;	/* A bundle with the parent of the thread */
+	struct list children;	     /* a list of child threads of the thread for wait syscall */
+	struct lock child_lock       /* a lock for the children list */
+	...
+	#endif
+  	}
+```
+- In threads/thread.c
+```
+/* This function will be modified to initialize the process_bundle. */
+static void init_thread (struct thread* t, const char *name, int priority);
+```
+- In userprog/process.h
+```
+/* We use this bundle to keep track of the information passed between a child process and its parent process. */
+struct process_bundle{
+	pid_t cid;			/* pid of the child */
+	pid_t par;			/* pid of the parent.*/
+	int status; 			/* The return status of the child, set to -1 upon initialization */
+	struct semaphore sem;		/* A semaphore to check program status */
+	struct lock pb_lock;		/* A lock on access to status, child_exit, parent_exit, and loaded /*
+	bool child_exit; 		/* A value to check if the child has exited.*/
+	bool parent_exit; 		/* A value to check if the parent has exited.*/
+	bool loaded;			/* A value to check if the child program has loaded */
+	struct list_elem elem;		/* A list elem used for a process’ children list. */
+}
+```
+- In userprog/process.c
+```
+/* We modify this function to update process_bundle and inform parent process */
+static void start_process(void *file_name)
+
+/* This function will be modified to update the process_bundle. */
+void process_exit(void)
+void process_wait(tid)
+```
+### 2. Algorithm
+
+- init_thread</br>
+We initialize the `process_bundle` by `malloc()`, set the parent as `thread_current()`, and initialize the `fs_bundle` semaphore as 0. Additionally, we add the `process_bundle` to the parent’s children list.
+
+- start_process</br>
+If the user program is successfully loaded, we set `process_bundle` loaded to true, and `sema_up()` the semaphore.
+
+- process_exit</br>
+We check the parent `process_bundle`, and all the `process_bundle` in children list. For each `process_bundle` that exists, we set the `child_exit` (for parent `process_budle`) or parent_exit (for `process_bundles` in children list) to true, and we free that `process_bundle` if both the child and the parent have exited. Additionally, if the parent `process_bundle` is not freed, we call `sema_up()` on the semaphore. 
+
+- Use of `pb_lock` and `child_lock`</br>
+For any functions that require access/modification to a `process_bundle` status, `child_exit`, `parent_exit`, or loaded, it needs to acquire `pb_lock` to ensure that there is no race condition. The lock is immediately released after access/modification.
+For any access/change to a thread’s children list, acquisition of the `child_lock` is required, and the lock should be released immediately after access/change.
+
+- Practice</br>
+We take `arg[1]` as an integer, increment it by 1, and return it by passing it to `$eax`.
+
+- Halt</br>
+Call void `shutdown_power_off` in `device/shutdown.c` to shutdown the device and close the main thread.
+
+- Exec</br>
+Call `process_execute()` in userprog/process.c to initiate another process and obtain a `tid_t` value.  Then, we locate the corresponding `process_bundle` in children list, and call `sema_down()` on its semaphore. Lastly, we check the `process_bundle` loaded value. If loaded is false, we return -1, remove the `process_bundle` from the children list, and free the `process_bundle`; otherwise, we return the `tid_t` value. 
+
+- Exit</br>
+We check if the parent `process_bundle` exists, and if it does, we set the status to `arg[1]`. Then, we call `thread_exit()` to exit the process. 
+
+- Wait</br>
+We first iterate through children list to check if the `process_bundle` corresponding to the pid value exists, and return -1 if it does not exist.
+Then, we call `sema_down` on the `process_bundle`’s semaphore value only if `process_bundle`'s `child_exited` is false. We then remove this `process_bundle` from children list, get its status value, and free the `process_bundle`. Lastly, we return the status value.
+
+
+- Safely access user address</br>
+We verify the validity of a user-provided pointer (as well as the whole region of memory spanning the arguments) before dereferencing it. We first check if it is a null pointer, then check if the pointer to kernel virtual address space using `is_kernel_vaddr`, and finally check if pointer to unmapped virtual memory by checking if `pagedir_get_page` returns `null`.
+
+### 3. Synchronization
+For wait and exec, we decided to use the semaphores to track the order in which events should happen. Since we have one semaphore for each parent-child relationship, the problem was able to be solved in a straightforward manner: the parent down the semaphore when it waits for the child, and the child ups the semaphore when it wants to wake up the parent.<\br>
+We know that a child can up the semaphore at most twice: once after it is successfully loaded (in `start_process`), and once when it exits (in `process_exit`). For exec, this is perfectly fine: it could be woken up by any of them, and is guaranteed to be woken up since it is guaranteed to happen before any wait syscalls. For wait, there is a danger of never being woken up if the process fails loading, or if wait is called multiple times on the child process. As a result, we include an additional check, which is whether the child process has exited, to avoid putting a process into eternal sleep.<\br>
+Additionally, we want to make sure that there are no race conditions happening in any `process_bundle`, since multiple threads may access and modify it at the same time. As a result, we add a lock in the `process_bundle`, and a thread must acquire the lock before modifying or checking the values. 
+
+
+### 4. Rationale
+We created `process_bundle` as a communication channel between the parent and the child processes. We decided to put this in kernel memory, so that it is not freed erroneously after one of the processes exits. Additionally, we included a lock to prevent race conditions.
+
+`Practise` and `halt` are pretty straightforward, and so we just followed the spec. For `exec`, `exit`, and `wait`, we decided to use a semaphore to allow the parent and child threads to coordinate. our key idea was to make sure that the number of `sema_up()` is always larger than that of `sema_down()`: exec calls `sema_down()` once, and `wait()` calls it an additional time. As a result, we put one `sema_up()` after successful load, and one `sema_down()` in `process_exit()`, so that a parent thread is guaranteed to wake up.
+
+Another area we focused on was when to free the `process_bundle`, and when to add/remove `process_bundle` to a process’ children list. For the former, a `process_bundle` is freed in two cases: 1. It is freed by a child process upon exit if its parent process has exited. 2. It is freed by a parent process when it calls wait() on a child process, or when it calls `exec()` and find that the child process failed loading. This way, we make sure that every `process_bundle` is freed exactly once. For managing a process’ children list, we make sure to add it exactly once upon creating the thread, and always remove it if the `process_bundle` is freed (i.e. whenever a parent frees a child `process_bundle`, iit always remove it from the children list first). 
+
+Overall, this task’s design is quite complex, but we hope that by clearly dividing up the work between the parent process and the child process, we should be fine. When we start coding, we may realize that some parts of the design is redundant, and we will remove them as see fit.
 
 
 ## Task 3 File Operation Syscalls
@@ -28,11 +123,11 @@ struct list all_files;
 ```
 /* This struct is used to keep track of different level of I/O calls.
 struct fs_bundle{
-		const char *filename;  /* The file name used to open the file */
-int fd;			/* The underlying file descriptor */
-		struct file *file;		/* The underlying file struct */
-		list_elem fs_elem; 	/* Element for the files list in thread.c */
-		list_elem global_elem; /* Element for the file_global_list in syscall.c */
+	const char *filename;  /* The file name used to open the file */
+	int fd;			/* The underlying file descriptor */
+	struct file *file;		/* The underlying file struct */
+	list_elem fs_elem; 	/* Element for the files list in thread.c */
+	list_elem global_elem; /* Element for the file_global_list in syscall.c */
 }
 ```
 - In threads/thread.h
