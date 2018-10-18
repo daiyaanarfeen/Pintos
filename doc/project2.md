@@ -83,7 +83,7 @@ void process_wait(tid)
 ### 2. Algorithm
 
 - init_thread</br>
-We initialize the `process_bundle` by `malloc()`, set the parent as `thread_current()`, and initialize the `fs_bundle` semaphore as 0. Additionally, we add the `process_bundle` to the parent’s children list.
+We initialize the `process_bundle` by `malloc()`, set the parent as `thread_current()`, and initialize the `process_bundle` semaphore as 0. Additionally, we add the `process_bundle` to the parent’s children list.
 
 - start_process</br>
 If the user program is successfully loaded, we set `process_bundle` loaded to true, and `sema_up()` the semaphore.
@@ -180,8 +180,8 @@ void process_exit(void);
 We initialize the files list and set `next_fd` to 2 in thread.c, since 0 and 1 are reserved for the console. We also initialize the `file_global_lock` in `syscall_init`. </br>
 
 - Disable writes on currently running programs’ executables</br>
-We keep track of all the files (in the form of `fs_bundle`) opened by all processes. Whenever a process executes, it iterates through all the files, and disable writes on files that point to its executable; similarly, when a process exits, it iterates through all the files, and enable writes on files that point to its executable.</br>
-Additionally, when a file is opened, it iterates through `all_list`, and disable write if any of the processes is executing the file (this is checked through thread’s name).</br>
+We keep track of all the files (in the form of `fs_bundle`) in opened by all processes in all_files. Whenever a process executes, it iterates through all_files, and disable writes on files that point to its executable; similarly, when a process exits, it iterates through all the files, and enable writes on files that point to its executable.</br>
+Additionally, when a file is opened, it iterates through `all_files`, and disable write if any of the processes is executing the file (this is checked through thread’s name).</br>
 
 - create</br>
 We acquire the `file_global_lock`, and then use `filesys_create` with the provided arguments to create the file. Finally, we release `file_global_lock`.</br>
@@ -236,7 +236,7 @@ Lastly, this task should be independent from the other two tasks in nature.
 Explanation: In line 18 we moved address -(64*1024*1024) to the register esp, which is stack pointer. Then we do a system call. Since the address lies approximately 64mb below the code segment, It’s a invalid stack pointer. 
 
 ### 2. Test name: `sc-bad-arg.c`
-Explanation: In line 14 we first move the address `0xbffffffc` to the register stack pointer. Then we move a long type of register zero(which contains the value zero.) to the value of the register stack pointer, which is `0xbffffffc`. Since we add a long type of value, the end of the stack pointer is now `0xc0000003`. Then we do the syscall. Since our `PHYS_BASE` is `0xc0000000`. The pointer is in kernel virtual address space, which is a invalid pointer. 
+Explanation: In line 14 we first move the address `0xbffffffc` to the stack pointer register, which means the stack is now at that address. Then we move a long type of register zero(which contains the value zero.) to the address of the register stack pointer, which is `0xbffffffc`. Since we add a long type of value, the the variable on the stack  now reaches the address `0xc0000003`. Then we do the syscall. Since our `PHYS_BASE` is `0xc0000000`. The pointer is in kernel virtual address space, which is a invalid pointer. 
 
 ### 3 File Operation Syscall: remove
 Remove syscall of task 3 is not tested in the provided test cases. Since it is one of the important functionalities of the file system, we should test thoroughly this syscall. Specifically, we should test that when a file is removed, any process which has a file descriptor for that file may continue to use that descriptor. In other words, after being removed, the file will not have a name and no other processes will be able to open it. However, processes that have access to the file prior to its removal should still be able to read and write from the file, until all file descriptors referring to the file are closed or the machine shuts down.
