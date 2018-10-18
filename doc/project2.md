@@ -180,7 +180,7 @@ void process_exit(void);
 We initialize the files list and set `next_fd` to 2 in thread.c, since 0 and 1 are reserved for the console. We also initialize the `file_global_lock` in `syscall_init`. </br>
 
 - Disable writes on currently running programs’ executables</br>
-We keep track of all the files (in the form of `fs_bundle`) in opened by all processes in all_files. Whenever a process executes, it iterates through all_files, and disable writes on files that point to its executable; similarly, when a process exits, it iterates through all the files, and enable writes on files that point to its executable.</br>
+We keep track of all the files (in the form of `fs_bundle`) in opened by all processes in `all_files`. Whenever a process executes, it iterates through all_files, and disable writes on files that point to its executable; similarly, when a process exits, it iterates through all the files, and enable writes on files that point to its executable.</br>
 Additionally, when a file is opened, it iterates through `all_files`, and disable write if any of the processes is executing the file (this is checked through thread’s name).</br>
 
 - create</br>
@@ -190,7 +190,7 @@ We acquire the `file_global_lock`, and then use `filesys_create` with the provid
 We acquire the `file_global_lock`, and then use `filesys_remove` with the provided arguments to remove the file. If successful, we also remove the file from the current thread’s files list. Finally, we release `file_global_lock`.</br>
 
 - open</br>
-We acquire the `file_global_lock`, then use `filesys_open` with the provided arguments to open the file and obtain a `struct *file` instance. If successful, we bind next_fd to the new instance and add the resulting `fs_bundle` to the current thread’s files list. We add one to `next_fd` so that we can keep track of the next available file descriptor to use. Finally, we release `file_global_lock`.</br>
+We acquire the `file_global_lock`, then use `filesys_open` with the provided arguments to open the file and obtain a `struct *file` instance. If successful, we bind next_fd to the new instance and add the resulting `fs_bundle` to the current thread’s `files` list and the global `all_files` list. We add one to `next_fd` so that we can keep track of the next available file descriptor to use. Finally, we release `file_global_lock`.</br>
 
 - filesize</br>
 We first acquire the `file_global_lock`. We go through the files list, and get the file struct if it exists. We return the length by `file_length`. Finally, we release `file_global_lock`.</br>
@@ -213,7 +213,7 @@ We first acquire the `file_global_lock`. we go through the files list and get th
 We first acquire the `file_global_lock`. we go through the files list and get the corresponding `fs_bundle` instance if successful. We get the file instance and call `file_tell`. Finally, we release `file_global_lock`. </br>
 
 - close</br>
-We first acquire the `file_global_lock`. we go through the files list and get the corresponding `fs_bundle` instance if successful. We get the file instance and call `file_close`. Additionally, we remove the `fs_bundle` from files list. Finally, we release `file_global_lock`. 
+We first acquire the `file_global_lock`. we go through the files list and get the corresponding `fs_bundle` instance if successful. We get the file instance and call `file_close`. Additionally, we remove the `fs_bundle` from files list and the global `all_files` list. Finally, we release `file_global_lock`. 
 
 
 ### 3. Synchronization
