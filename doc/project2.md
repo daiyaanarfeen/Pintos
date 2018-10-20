@@ -14,11 +14,9 @@ Design Document for Project 2: User Programs
 
 - In userprog/process.c
 ```
-/* This function will be modified to split file_name and extract argc and argv[] */
+/* This function will be modified to split file_name and extract argc and argv[] and push arg's to stack */
 bool load (const char *file_name, void (**eip) (void), void **esp)
 
-/* This function will be modified to load arguments to the stack. */
-static bool setup_stack (void **esp)
 ```
 
 ### 2. Algorithms
@@ -187,7 +185,7 @@ Additionally, when a file is opened, it iterates through `all_files`, and disabl
 We acquire the `file_global_lock`, and then use `filesys_create` with the provided arguments to create the file. Finally, we release `file_global_lock`.</br>
 
 - remove</br>
-We acquire the `file_global_lock`, and then use `filesys_remove` with the provided arguments to remove the file. If successful, we also remove the file from the current thread’s files list. Finally, we release `file_global_lock`.</br>
+We acquire the `file_global_lock`, and then use `filesys_remove` with the provided arguments to remove the file. Finally, we release `file_global_lock`.</br>
 
 - open</br>
 We acquire the `file_global_lock`, then use `filesys_open` with the provided arguments to open the file and obtain a `struct *file` instance. If successful, we bind next_fd to the new instance and add the resulting `fs_bundle` to the current thread’s `files` list and the global `all_files` list. We add one to `next_fd` so that we can keep track of the next available file descriptor to use. Finally, we release `file_global_lock`.</br>
