@@ -92,21 +92,8 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    struct list_elem wait_list_elem;    /* wait_list element. */
-    int64_t wake_up_tick;               /* Tick time to wake up. */
-
-    /* Shared between thread.c and synch.c */
-    int original_priority;
-    struct thread* blocking_thread;     /* Thread blocking the current thread. */
-    struct list waiting_threads;        /* Threads the current thread is blocking. */
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    struct list_elem priority_elem;     /* Priority List Element */
-    struct list_elem lock_waiter_elem;  /* Waiting_Threads Element */
-    
-    int niceness;                       /* Thread's niceness value */
-    fixed_point_t recent_cpu;           /* Thread's recent CPU value */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -152,9 +139,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-bool compare_priority (const struct list_elem* a, const struct list_elem* b, UNUSED void* aux);
-
-bool compare_priority_waiters (const struct list_elem* a, const struct list_elem* b, UNUSED void* aux);
 
 #endif /* threads/thread.h */
