@@ -41,8 +41,12 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  size_t name_len = strcspn (file_name, " ") + 1;
+  char name[name_len];
+  strlcpy (name, file_name, name_len);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -211,7 +215,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp)
+load (const char *file_info, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -225,6 +229,15 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL)
     goto done;
   process_activate ();
+
+  /* Copy file name */
+  char* fn_copy = palloc_get_page (0);
+  if (fn_copy == NULL)
+    return TID_ERROR;
+  strlcpy (fn_copy, file_info, PGSIZE);
+
+  char* sp;
+  char* file_name = strtok_r(fn_copy, " ", &sp);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -309,17 +322,56 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+  
+  char* file_info_copy = palloc_get_page (0);
+  if (file_info_copy == NULL)
+    return TID_ERROR;
+  strlcpy (file_info_copy, file_info, PGSIZE);
+
+  /* Argument Data */
+
+  char*argv_addr[128];
+  char* argu;
+  char *save_pointer;
+
+  int argc = 0;
+  for (argu = strtok_r(file_info_copy, " ", &save_pointer); argu != NULL; argu = strtok_r(NULL, " ", &save_pointer)){
+    *esp -= strlen(argu) + 1;
+    memcpy(*esp, argu, strlen(argu) + 1);
+    argv_addr[argc++] = *esp;
+  }
+  argv_addr[argc] = NULL;
+
+  *esp -= sizeof(*esp) % 4;
+  *esp -= (argc + 1) * sizeof(char*);
+  memcpy(*esp, argv_addr, (argc + 1) * sizeof(char*));
+
+  /* Pointer to argument list and argc */
+  *esp -= 4;
+  **((char****) esp) = *esp + 4;
+
+  *esp -= 4;
+  **((int **)esp) = argc;
+
+  /* Dummy return address */
+  *esp -= 4;
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
   success = true;
 
+  palloc_free_page(fn_copy);
+  palloc_free_page (file_info_copy);
+
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
   return success;
 }
+
+//pintos --gdb --filesys-size=2 -p build/tests/userprog/args-multiple -a args-multiple -- -q  -f run 'args-multiple some arguments for you!'
+
 
 /* load() helpers. */
 
