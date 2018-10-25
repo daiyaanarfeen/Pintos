@@ -42,11 +42,6 @@ timer_init (void)
 /* Calibrates loops_per_tick, used to implement brief delays. */
 void
 timer_calibrate (void)
-}
-
-/* Calibrates loops_per_tick, used to implement brief delays. */
-void
-timer_calibrate (void)
 {
   unsigned high_bit, test_bit;
 
