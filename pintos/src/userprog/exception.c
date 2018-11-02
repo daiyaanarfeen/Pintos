@@ -136,6 +136,9 @@ page_fault (struct intr_frame *f)
      (#PF)". */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
+  /*checks faul_addr is valid */ 
+  check_valid_ptr(fault_addr, 0, f);
+
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();

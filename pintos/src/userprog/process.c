@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -46,7 +47,36 @@ process_execute (const char *file_name)
   strlcpy (name, file_name, name_len);
 
   /* Create a new thread to execute FILE_NAME. */
+
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  
+  /* Task 2 */
+  struct thread *cur = thread_current();
+  lock_acquire(&(cur -> child_lock));
+  struct list_elem *e;
+  struct process_bundle *bundle;
+  for (e = list_begin(&(cur -> children)); e != list_end(&(cur -> children)); 
+       e = list_next(e)) 
+    {
+      bundle = list_entry(e, struct process_bundle, elem);
+      if (bundle -> cid == tid)
+        break;
+      bundle = NULL;
+    }
+  if (!bundle) {
+    /* Something is wrong. We throw an assertion error */
+    ASSERT(1 == 2);
+  }
+  lock_release(&(cur -> child_lock));
+  sema_down(&(bundle -> sem));
+  if (!bundle -> loaded) {
+    lock_acquire(&(cur -> child_lock));
+    list_remove(&(bundle -> elem));
+    lock_release(&(cur -> child_lock));
+    return -1;
+  }
+  /* End of Task 2 */
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -70,8 +100,17 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success)
+  if (!success) {
     thread_exit ();
+  } else {
+    /* Task 2 */
+
+    struct process_bundle *parent = thread_current() -> parent;
+    parent -> loaded = true;
+    sema_up(&(parent -> sem));
+
+    /* End of Task 2 */
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -93,10 +132,31 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  sema_down (&temporary);
-  return 0;
+  int status = -1;
+  struct thread *cur = thread_current();
+  lock_acquire(&(cur -> child_lock));
+  struct list_elem *e;
+  struct process_bundle *bundle;
+  for (e = list_begin(&(cur -> children)); e != list_end(&(cur -> children)); 
+       e = list_next(e)) 
+    {
+      bundle = list_entry(e, struct process_bundle, elem);
+      if (bundle -> cid == child_tid)
+        break;
+      bundle = NULL;
+    }
+  lock_release(&(cur -> child_lock));
+  if (!bundle) 
+    return status;
+  if (!bundle->child_exit)
+    sema_down(&(bundle -> sem));
+  status = bundle -> status;
+  lock_acquire(&(cur -> child_lock));
+  list_remove(&(bundle -> elem));
+  lock_release(&(cur -> child_lock));
+  return status;
 }
 
 /* Free the current process's resources. */
@@ -105,7 +165,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -122,7 +182,46 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up (&temporary);
+  /* Task 2 */
+
+  struct list *child_list = &(cur -> children);
+  /* Iterate through children list and change exit value */
+  lock_acquire(&(cur -> child_lock));
+  struct list_elem *e = list_begin(child_list);
+  while (e != list_tail(child_list))
+    {
+      struct process_bundle *pb = list_entry(e, struct process_bundle, elem);
+      lock_acquire(&(pb -> pb_lock));
+      pb -> parent_exit = true;
+      bool child_exit = pb -> child_exit;
+      lock_release(&(pb -> pb_lock));
+      if (child_exit) {
+        /* Both parent and child processes have exited, destroy process_bundle */
+        struct list_elem *old = e;
+        e = list_next(e);
+        list_remove(old);
+        free(pb);
+      } else {
+        e = list_next(e);
+      }
+    }
+  lock_release(&(cur -> child_lock));
+
+  /* Check parent process bundle */
+  struct process_bundle *par = cur -> parent;
+  lock_acquire(&(par -> pb_lock));
+  par -> child_exit = true;
+  bool parent_exit = par -> parent_exit;
+  lock_release(&(par -> pb_lock));
+  if (parent_exit) {
+    /* Both parent and child processes have exited, destroy process_bundle */
+    free(par);
+  } else {
+    /* Call sema_up on the bundle semaphore */
+    sema_up(&(par -> sem));
+  }
+
+  /* End of Task 2 */
 }
 
 /* Sets up the CPU for running user code in the current
