@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -27,6 +28,7 @@ static struct list ready_list;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
+struct list* all_list_ptr;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -92,6 +94,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  all_list_ptr = &all_list;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -182,6 +185,25 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  /* Task 2 */
+
+  /* Initialize the process bundles */
+  t->parent = (struct process_bundle *)malloc(sizeof(*t->parent));
+
+  /* Initialize parent pb's value*/
+  struct thread *par_thread = thread_current();
+  struct process_bundle *pb = t->parent;
+  pb -> cid = tid;
+  pb -> par = par_thread -> tid;
+  pb -> status = -1;
+  sema_init(&(pb->sem), 0);
+  lock_init(&(pb->pb_lock));
+
+  /* Add current pb to parent's children list */
+  list_push_back(&(par_thread->children), &(pb->elem));
+
+  /* End of Task 2 */
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -463,7 +485,17 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  #ifdef USERPROG
+    list_init(&t->files); /* Use this list to keep track of all files*/
+    t->next_fd = 2;  /* Keep track of the next available file descriptor to use */
+  #endif
 
+  /* Task 2 */
+
+  list_init(&(t->children));
+  lock_init(&(t->child_lock));
+
+  /* End of Task 2 */
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

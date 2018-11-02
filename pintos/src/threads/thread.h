@@ -21,6 +21,9 @@ enum thread_status
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
+/* pid is defined to be the same as tid. */
+typedef int pid_t;
+
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
@@ -98,11 +101,41 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+
+    /* Task 2 */
+
+    /* Shared between thread.c and process.c */
+    struct process_bundle *parent;  /* Bundle with the parent of the thread */
+    struct list children;      /* List of child threads of the thread for wait syscall */
+    struct lock child_lock;       /* Lock for the children list */
+    // struct semaphore child_init; /* Semaphore to ensure order between child and parent */
+
+    /* End of Task 2 */
+
+    struct list files; /* Use this list to keep track of all files*/
+    int next_fd;  /* Keep track of the next available file descriptor to use */
 #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+/* Task 2 */
+  
+struct process_bundle
+  {
+    pid_t cid;      /* pid of the child */
+    pid_t par;      /* pid of the parent.*/
+    int status;       /* The return status of the child, set to -1 upon initialization */
+    struct semaphore sem;   /* A semaphore to check program status */
+    struct lock pb_lock;    /* A lock on access to status, child_exit, parent_exit, and loaded */
+    bool child_exit;    /* A value to check if the child has exited.*/
+    bool parent_exit;     /* A value to check if the parent has exited.*/
+    bool loaded;      /* A value to check if the child program has loaded */
+    struct list_elem elem;    /* A list elem used for a process’ children list. */
+  };
+
+/* End of Task 2 */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -140,4 +173,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+extern struct list* all_list_ptr;
 #endif /* threads/thread.h */
