@@ -189,14 +189,17 @@ thread_create (const char *name, int priority,
   /* Task 2 */
 
   /* Initialize the process bundles */
-  t->parent = (struct process_bundle *)malloc(sizeof(*t->parent));
-
+  t->parent = (struct process_bundle *)malloc(sizeof(struct process_bundle));
+  memset (t->parent, 0, sizeof(struct process_bundle));
   /* Initialize parent pb's value*/
   struct thread *par_thread = thread_current ();
   struct process_bundle *pb = t->parent;
   pb->cid = tid;
   pb->par = par_thread->tid;
   pb->status = -1;
+  pb->loaded = false;
+  pb->child_exit = false;
+  pb->parent_exit = false;
   sema_init (&pb->sem, 0);
   lock_init (&pb->pb_lock);
 
