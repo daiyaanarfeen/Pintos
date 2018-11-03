@@ -192,16 +192,16 @@ thread_create (const char *name, int priority,
   t->parent = (struct process_bundle *)malloc(sizeof(*t->parent));
 
   /* Initialize parent pb's value*/
-  struct thread *par_thread = thread_current();
+  struct thread *par_thread = thread_current ();
   struct process_bundle *pb = t->parent;
-  pb -> cid = tid;
-  pb -> par = par_thread -> tid;
-  pb -> status = -1;
-  sema_init(&(pb->sem), 0);
-  lock_init(&(pb->pb_lock));
+  pb->cid = tid;
+  pb->par = par_thread->tid;
+  pb->status = -1;
+  sema_init (&pb->sem, 0);
+  lock_init (&pb->pb_lock);
 
   /* Add current pb to parent's children list */
-  list_push_back(&(par_thread->children), &(pb->elem));
+  list_push_back (&par_thread->children, &pb->elem);
 
   /* End of Task 2 */
 

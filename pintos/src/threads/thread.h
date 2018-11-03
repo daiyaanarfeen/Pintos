@@ -102,15 +102,10 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 
-    /* Task 2 */
-
     /* Shared between thread.c and process.c */
     struct process_bundle *parent;  /* Bundle with the parent of the thread */
     struct list children;      /* List of child threads of the thread for wait syscall */
     struct lock child_lock;       /* Lock for the children list */
-    // struct semaphore child_init; /* Semaphore to ensure order between child and parent */
-
-    /* End of Task 2 */
 
     struct list files; /* Use this list to keep track of all files*/
     int next_fd;  /* Keep track of the next available file descriptor to use */
@@ -120,8 +115,7 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-/* Task 2 */
-  
+/* Used to record information bewteen a parent thread and a child thread */
 struct process_bundle
   {
     pid_t cid;      /* pid of the child */
@@ -134,8 +128,6 @@ struct process_bundle
     bool loaded;      /* A value to check if the child program has loaded */
     struct list_elem elem;    /* A list elem used for a process’ children list. */
   };
-
-/* End of Task 2 */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
