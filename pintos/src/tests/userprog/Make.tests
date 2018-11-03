@@ -3,7 +3,7 @@
 tests/%.output: FILESYSSOURCE = --filesys-size=2
 tests/%.output: PUTFILES = $(filter-out kernel.bin loader.bin, $^)
 
-tests/userprog_TESTS = $(addprefix tests/userprog/, my-test-remove my-test-tell  \
+tests/userprog_TESTS = $(addprefix tests/userprog/, my-test-remove my-test-write  \
 args-none args-single args-multiple args-many args-dbl-space sc-bad-sp		\
 sc-bad-arg sc-boundary sc-boundary-2 halt exit create-normal		\
 create-empty create-null create-bad-ptr create-long create-exists	\
@@ -21,7 +21,7 @@ tests/userprog_PROGS = $(tests/userprog_TESTS) $(addprefix \
 tests/userprog/,child-simple child-args child-bad child-close child-rox)
 
 tests/userprog/my-test-remove_SRC = tests/userprog/my-test-remove.c tests/main.c
-tests/userprog/my-test-tell_SRC = tests/userprog/my-test-tell.c tests/main.c
+tests/userprog/my-test-write_SRC = tests/userprog/my-test-write.c tests/main.c
 
 tests/userprog/iloveos_SRC = tests/userprog/iloveos.c tests/main.c
 tests/userprog/practice_SRC = tests/userprog/practice.c tests/main.c
