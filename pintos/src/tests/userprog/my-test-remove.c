@@ -7,7 +7,6 @@
 #include "tests/main.h"
 
 #include <stdio.h>
-#include "tests/filesys/base/syn-write.h"
 
 char buf1[1234];
 
@@ -21,14 +20,12 @@ test_main (void)
   CHECK ((fd = open (file_name)) > 1, "open \"%s\"", file_name);
   CHECK (remove (file_name), "remove \"%s\"", file_name);
 
-  char cmd_line[128];
-  pid_t child;
-  snprintf (cmd_line, sizeof cmd_line, "%s %zu", "child-syn-wrt", 0);
-
   msg("Write the file with a different process should fail.");
-
-  CHECK ((child = exec (cmd_line)) == PID_ERROR,
-          "exec child %zu of %zu: \"%s\"", 1, 1, cmd_line);
+  int status = wait(exec("w-closed"));
+  if (status == -1)
+  {
+    fail("Child exited abnormally");
+  }
 
   msg ("close \"%s\"", file_name);
   close (fd);
