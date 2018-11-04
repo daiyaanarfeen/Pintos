@@ -3,7 +3,7 @@
 tests/%.output: FILESYSSOURCE = --filesys-size=2
 tests/%.output: PUTFILES = $(filter-out kernel.bin loader.bin, $^)
 
-tests/userprog_TESTS = $(addprefix tests/userprog/, my-test-remove my-test-write  \
+tests/userprog_TESTS = $(addprefix tests/userprog/, my-test-remove my-test-tell\
 args-none args-single args-multiple args-many args-dbl-space sc-bad-sp		\
 sc-bad-arg sc-boundary sc-boundary-2 halt exit create-normal		\
 create-empty create-null create-bad-ptr create-long create-exists	\
@@ -18,10 +18,13 @@ rox-child rox-multichild bad-read bad-write bad-read2 bad-write2        \
 bad-jump bad-jump2 iloveos practice)
 
 tests/userprog_PROGS = $(tests/userprog_TESTS) $(addprefix \
-tests/userprog/,child-simple child-args child-bad child-close child-rox)
+tests/userprog/,child-simple child-args child-bad child-close child-rox bad-tell-1 bad-tell-2 bad-tell-3)
 
 tests/userprog/my-test-remove_SRC = tests/userprog/my-test-remove.c tests/main.c
-tests/userprog/my-test-write_SRC = tests/userprog/my-test-write.c tests/main.c
+tests/userprog/my-test-tell_SRC = tests/userprog/my-test-tell.c tests/main.c
+tests/userprog/bad-tell-1_SRC = tests/userprog/bad-tell-1.c tests/main.c
+tests/userprog/bad-tell-2_SRC = tests/userprog/bad-tell-2.c tests/main.c
+tests/userprog/bad-tell-3_SRC = tests/userprog/bad-tell-3.c tests/main.c
 
 tests/userprog/iloveos_SRC = tests/userprog/iloveos.c tests/main.c
 tests/userprog/practice_SRC = tests/userprog/practice.c tests/main.c
@@ -136,3 +139,7 @@ tests/userprog/multi-child-fd_PUTFILES += tests/userprog/child-close
 tests/userprog/wait-killed_PUTFILES += tests/userprog/child-bad
 tests/userprog/rox-child_PUTFILES += tests/userprog/child-rox
 tests/userprog/rox-multichild_PUTFILES += tests/userprog/child-rox
+
+tests/userprog/my-test-tell_PUTFILES += tests/userprog/bad-tell-1
+tests/userprog/my-test-tell_PUTFILES += tests/userprog/bad-tell-2
+tests/userprog/my-test-tell_PUTFILES += tests/userprog/bad-tell-3
