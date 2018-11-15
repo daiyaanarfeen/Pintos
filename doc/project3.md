@@ -43,7 +43,9 @@ size_t cache_read(void * buf, off_t offset, size_t length);
 
 /* Reads data from a buffer into a sector, starting at the offset. Returns the number of bytes written.*/
 size_t cache_write(void * buf, off_t offset, size_t length);
-
+```
+- In inode.c:
+```
 /* The following functions will be modified to use the cache */
 off_t inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset);
 off_t inode_write_at (struct inode *inode, const void *buffer_, off_t size, off_t offset);
@@ -95,14 +97,12 @@ struct inode_disk {
 }
 ```
 
-### 2. Algorithm
+### 2. Algorithms
 The following functions will be changed:
 
-- inode_create: 
-First, a block will be allocated for the `inode_disk` object the same way that it is done now. For blocks after that, instead of using `free_map_allocate` to allocate contiguous blocks (which could fail if a long enough contiguous set of blocks does not exist) we will iteratively allocate 1 block at a time using `free_map_allocate` and put them in the ordered array of block sectors `direct`; if more than 123 blocks need to be allocated then we will allocate additional blocks for `indirect` and `doubly_indirect` before continuing to allocate blocks. This will avoid external fragmentation in the disk and ensure that files can be extended (detailed in next part). If at any point `free_map_allocate` fails to allocate an additional needed block, all the blocks allocated up to that point will be `free_map_release` and the call to `inode_create` will return false.
+In `inode_create`, a block will be allocated for the `inode_disk` object the same way that it is done now. For blocks after that, instead of using `free_map_allocate` to allocate contiguous blocks (which could fail if a long enough contiguous set of blocks does not exist) we will iteratively allocate 1 block at a time using `free_map_allocate` and put them in the ordered array of block sectors `direct`; if more than 123 blocks need to be allocated then we will allocate additional blocks for `indirect` and `doubly_indirect` before continuing to allocate blocks. This will avoid external fragmentation in the disk and ensure that files can be extended (detailed in next part). If at any point `free_map_allocate` fails to allocate an additional needed block, all the blocks allocated up to that point will be `free_map_release` and the call to `inode_create` will return false.
 
-- inode_write_at: 
-The first thing that `inode_write_at` will do is to check if writing `size` bytes starting at `offset` will write past the current EOF. If it will, then `inode_write_at` will call `lock_acquire` on `inode -> resizing` (which may put the thread to sleep if another thread is already resizing this inode). Once the thread acquires this lock, it will again check if writing `size` bytes starting at `offset` to the resized inode will write past EOF. If it still will, then `inode_write_at` will begin iteratively allocating 1 block at a time using `free_map_allocate` until enough blocks have been allocated to “inode” or until `free_map_allocate` cannot allocate anymore additional blocks. At this point the lock will be released and `inode_write_at` will begin `block_write`ing to the blocks it needs to write at (if `inode_write_at` does not need to extend a file it will just skip to this part).
+In `inode_write_at`, we first check if writing `size` bytes starting at `offset` will write past the current EOF. If it will, then `inode_write_at` will call `lock_acquire` on `inode -> resizing` (which may put the thread to sleep if another thread is already resizing this inode). Once the thread acquires this lock, it will again check if writing `size` bytes starting at `offset` to the resized inode will write past EOF. If it still will, then `inode_write_at` will begin iteratively allocating 1 block at a time using `free_map_allocate` until enough blocks have been allocated to “inode” or until `free_map_allocate` cannot allocate anymore additional blocks. At this point the lock will be released and `inode_write_at` will begin `block_write`ing to the blocks it needs to write at (if `inode_write_at` does not need to extend a file it will just skip to this part).
 
 
 ### 3. Synchronization
@@ -173,16 +173,16 @@ Bool filesys_remove (const char *name)
 ```
 
 ### 2. Algorithms
-- Thread Initialization
+
 When we initialize the main thread in `thread_init`, initialize its `cwd` as root directory. When we initialize any other thread in `init_thread`, we will assign its cwd as cwd of `thread_current`.
 
-- Helper function `struct *dir get_dir_by_name(const char *dir)`
-
-We first look at the first two of dir: if it starts with ‘/’, it represents a full path. If it is a full path, we first call `dir_open_root` to open the root directory, which returns a dir struct. Then we recursively call the following functions in sequence until we reach the final level of directory: `get_next_part` to get the next directory name, then `dir_look_up` to find the inode of next level directory, finally `dir_open` to open the next level directory if `is_dir`. If at any point `get_next_part` or `dir_look_up` returns false, or `dir_open` returns NULL, we return NULL. Otherwise, We return a pointer to the dir struct of the final directory.
+We also need to construct a helper function `struct *dir get_dir_by_name(const char *dir)`. We first look at the first two of dir: if it starts with ‘/’, it represents a full path. If it is a full path, we first call `dir_open_root` to open the root directory, which returns a dir struct. Then we recursively call the following functions in sequence until we reach the final level of directory: `get_next_part` to get the next directory name, then `dir_look_up` to find the inode of next level directory, finally `dir_open` to open the next level directory if `is_dir`. If at any point `get_next_part` or `dir_look_up` returns false, or `dir_open` returns NULL, we return NULL. Otherwise, We return a pointer to the dir struct of the final directory.
 
 If the first character is not ‘/’, then it represents a relative path. In this case, we first call `get_next_part` once, which will assign next part to char part in its argument: if part becomes ‘.’, we start with cwd of current thread; if we encounter ‘..’, we go to the parent directory. Then we recursively call those three functions in sequence until we reach the final level of directory. If any failure, return NULL. Otherwise, we return a pointer to the dir struct of the final directory. 
 
 Finally, we implement the edge case checking. There are two edge cases we need to handle: Ignore .. on the root directory since the root directory is its own parent; Multiple consecutive slashes are equivalent to a single slash, so this file name is the same as a/b.
+
+We also need to add or modify the following functions:
 
 - Syscall: bool chdir(const char *dir):
 We call `get_dir_by_name` with dir. If the helper function returns a dir struct pointer, we assign it to cwd of current thread and return true. Otherwise, return false.
