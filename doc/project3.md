@@ -88,19 +88,26 @@ Overall, we expect our design to be conceptually clean. We might still need to w
 - In filesys/inode.c:
 ```
 struct inode_disk {
-	struct lock* resizing;     /* For serializing resizing ops */
 	block_sector_t direct[123];          /* First 123 blocks */
-	block_sector_t indirect;	           /* Indirect pointer to block pointing to next 512 blocks */
-	block_sector_t doubly_indirect;   /* Doubly indirect pointer for up to 512*512 more blocks */
+	block_sector_t indirect;	           /* Indirect pointer to block pointing to next 128 blocks */
+	block_sector_t doubly_indirect;   /* Doubly indirect pointer for up to 128*128 more blocks */
 	off_t length;			/* File size in bytes. */
 	unsigned magic;			/* Magic number. */
+}
+
+struct inode {
+	...
+	struct lock resizing;		     /* Lock for resizing file */
+	...
 }
 ```
 
 ### 2. Algorithms
 The following functions will be changed:
 
-In `inode_create`, a block will be allocated for the `inode_disk` object the same way that it is done now. For blocks after that, instead of using `free_map_allocate` to allocate contiguous blocks (which could fail if a long enough contiguous set of blocks does not exist) we will iteratively allocate 1 block at a time using `free_map_allocate` and put them in the ordered array of block sectors `direct`; if more than 123 blocks need to be allocated then we will allocate additional blocks for `indirect` and `doubly_indirect` before continuing to allocate blocks. This will avoid external fragmentation in the disk and ensure that files can be extended (detailed in next part). If at any point `free_map_allocate` fails to allocate an additional needed block, all the blocks allocated up to that point will be `free_map_release` and the call to `inode_create` will return false.
+In `inode_open`, we first check if an in-memory inode already exists. If it does not, when we initialize the in-memory inode we will also initialize the `resizing` lock. We might consider adding additional synchronization measures here, if needed.
+
+In `inode_create`, a block will be allocated for the `inode_disk` object the same way that it is done now. For blocks after that, instead of using `free_map_allocate` to allocate contiguous blocks (which could fail if a long enough contiguous set of blocks does not exist) we will iteratively allocate 1 block at a time using `free_map_allocate` and put them in the ordered array of block sectors `direct`; if more than 123 blocks need to be allocated then we will allocate additional blocks for `indirect` and `doubly_indirect` before continuing to allocate blocks. This will avoid external fragmentation in the disk and ensure that files can be extended (detailed in next part). If at any point `free_map_allocate` fails to allocate an additional needed block, all the blocks allocated up to that point will be `free_map_release` and the call to `inode_create` will return false. 
 
 In `inode_write_at`, we first check if writing `size` bytes starting at `offset` will write past the current EOF. If it will, then `inode_write_at` will call `lock_acquire` on `inode -> resizing` (which may put the thread to sleep if another thread is already resizing this inode). Once the thread acquires this lock, it will again check if writing `size` bytes starting at `offset` to the resized inode will write past EOF. If it still will, then `inode_write_at` will begin iteratively allocating 1 block at a time using `free_map_allocate` until enough blocks have been allocated to “inode” or until `free_map_allocate` cannot allocate anymore additional blocks. At this point the lock will be released and `inode_write_at` will begin `block_write`ing to the blocks it needs to write at (if `inode_write_at` does not need to extend a file it will just skip to this part).
 
