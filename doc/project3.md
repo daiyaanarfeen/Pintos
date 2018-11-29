@@ -46,7 +46,8 @@ size_t cache_write(void * buf, off_t offset, size_t length);
 ```
 - In inode.c:
 ```
-/* The following functions will be modified to use the cache */
+/* The following functions will be modified to use the cache. Alternatively, we may only modify block_read
+and block_write*/
 off_t inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset);
 off_t inode_write_at (struct inode *inode, const void *buffer_, off_t size, off_t offset);
 bool inode_create (block_sector_t sector, off_t length);
