@@ -6,6 +6,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include <stdio.h>
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -14,10 +15,13 @@
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    block_sector_t start;               /* First data sector. */
+    bool is_dir;
+    block_sector_t direct[123];
+    block_sector_t indirect;
+    block_sector_t doubly_indirect;
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
+    char unused[3];
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -31,12 +35,15 @@ bytes_to_sectors (off_t size)
 /* In-memory inode. */
 struct inode
   {
+    struct lock lock;                   /* Synch for changing inode values (open_cnt, removed) */
     struct list_elem elem;              /* Element in inode list. */
     block_sector_t sector;              /* Sector number of disk location. */
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
+
+    struct lock deny_lock;
+    struct condition no_writers_cond;
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-    struct inode_disk data;             /* Inode content. */
   };
 
 /* Returns the block device sector that contains byte offset POS
@@ -64,6 +71,21 @@ inode_init (void)
   list_init (&open_inodes);
 }
 
+/* Noncontiguous allocation of blocks */
+size_t
+allocate_sectors(size_t sectors, block_sector_t* alloced, bool strict)
+{
+  size_t i = 0;
+  while (i < sectors && free_map_allocate(1, alloced + i)) {
+    i += 1;
+  }
+  if (strict && i < sectors) {
+    for (i--; i > -1; i--)
+      free_map_release(alloced + i, 1);
+  }
+  return i;
+}
+
 /* Initializes an inode with LENGTH bytes of data and
    writes the new inode to sector SECTOR on the file system
    device.
@@ -85,19 +107,23 @@ inode_create (block_sector_t sector, off_t length)
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
+      disk_inode->length = 0;
       disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start))
+      block_sector_t alloced[sectors];
+      if (allocate_sectors(sectors, alloced, true) == sectors)
         {
+          for (int i = 0; i < sectors; i++) {
+            
+          }
           block_write (fs_device, sector, disk_inode);
-          if (sectors > 0)
+          /* if (sectors > 0)
             {
               static char zeros[BLOCK_SECTOR_SIZE];
               size_t i;
 
               for (i = 0; i < sectors; i++)
                 block_write (fs_device, disk_inode->start + i, zeros);
-            }
+            } */
           success = true;
         }
       free (disk_inode);
