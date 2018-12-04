@@ -7,6 +7,7 @@
 
 struct bitmap;
 
+size_t allocate_sectors(size_t sectors, block_sector_t* alloced, bool strict);
 void inode_init (void);
 bool inode_create (block_sector_t, off_t);
 struct inode *inode_open (block_sector_t);
