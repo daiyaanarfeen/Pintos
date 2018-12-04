@@ -43,7 +43,7 @@ struct inode
     bool is_dir;
 
     struct lock deny_lock;
-    struct condition no_writers_cond;
+    struct condition write_allowed;
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
   };
 
@@ -95,7 +95,9 @@ size_t
 allocate_sectors(size_t sectors, block_sector_t* alloced, bool strict)
 {
   size_t i = 0;
+  static char zeros[BLOCK_SECTOR_SIZE];
   while (i < sectors && free_map_allocate(1, alloced + i)) {
+    block_write(fs_device, alloced[i], zeros);
     i += 1;
   }
   if (strict && i < sectors) {
@@ -225,6 +227,7 @@ inode_open (block_sector_t sector)
   block_read (fs_device, inode->sector, &disk_inode);
   inode->is_dir = disk_inode->is_dir;
   lock_init(&inode->lock);
+  cond_init(&inode->write_allowed);
   return inode;
 }
 
@@ -349,8 +352,30 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
 
+  lock_acquire(&inode->deny_lock);
   if (inode->deny_write_cnt)
-    return 0;
+    cond_wait(&inode->write_allowed, &inode->deny_lock);
+  lock_release(&inode->deny_lock);
+
+  struct inode_disk disk_inode;
+
+  if (size + offset > inode_length(inode)) {
+    lock_acquire(inode->lock);
+    size_t num_sectors = bytes_to_sectors(inode_length(inode));
+    size_t sectors_needed = bytes_to_sectors(size + offset);
+
+    while (sectors_needed > 0) {
+      if (num_sectors < 123) {
+
+      }
+      if (num_sectors >= 123 && num_sectors < 251) {
+
+      }
+      if (num_sectors >= 251) {
+
+      }
+    }
+  }
 
   while (size > 0)
     {
@@ -428,5 +453,7 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  return inode->data.length;
+  struct inode_disk disk_inode;
+  block_read(fs_device, inode->sector, &disk_inode);
+  return disk_inode->length;
 }
