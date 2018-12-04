@@ -40,6 +40,7 @@ struct inode
     block_sector_t sector;              /* Sector number of disk location. */
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
+    bool is_dir;
 
     struct lock deny_lock;
     struct condition no_writers_cond;
@@ -54,8 +55,26 @@ static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos)
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
+  struct inode_disk disk_inode;
+  block_read(fs_device, inode->sector, &disk_inode); 
+  if (pos < disk_inode.length) {
+    size_t sector = bytes_to_sectors(pos);
+    if (sector <= 123)
+      return disk_inode.direct[sector - 1];
+    if (sector <= 251) {
+      block_sector_t indirect[128];
+      block_read(fs_device, disk_inode.indirect, indirect);
+      return indirect[sector - 124];
+    }
+    if (sector > 251) {
+      block_sector_t doubly_indirect[128];
+      block_read(fs_device, disk_inode.doubly_indirect, doubly_indirect);
+      block_sector_t middle_man = doubly_indirect[DIV_ROUND_UP(DIV_ROUND_UP(sector - 251, 128), 128) - 1];
+      block_sector_t indirect_block[128];
+      block_read(fs_device, middle_man, indirect_block);
+      return indirect_block[(sector - 251 - 1) % 128];
+    }
+  }
   else
     return -1;
 }
@@ -107,14 +126,53 @@ inode_create (block_sector_t sector, off_t length)
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = 0;
+      disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
-      block_sector_t alloced[sectors];
-      if (allocate_sectors(sectors, alloced, true) == sectors)
+      size_t total_to_alloc = sectors;
+      if (sectors > 123)
+        total_to_alloc++; //indirect block
+      if (sectors > 251) {
+        total_to_alloc++; //doubly indirect block
+        total_to_alloc += DIV_ROUND_UP(sectors - 251, 128); //doubly indirect data blocks
+        total_to_alloc += DIV_ROUND_UP(DIV_ROUND_UP(sectors - 251, 128), 128); //middle-men
+      }
+      block_sector_t alloced[total_to_alloc];
+      if (allocate_sectors(total_to_alloc, alloced, true))
         {
-          for (int i = 0; i < sectors; i++) {
-            
+          char block_buf[BLOCK_SECTOR_SIZE] = "";
+          if (sectors <= 123) 
+            memcpy(disk_inode->direct, alloced, sectors * sizeof(block_sector_t));
+          if (sectors > 123 && sectors <= 251) {
+            memcpy(disk_inode->direct, alloced, 123 * sizeof(block_sector_t));
+            disk_inode->indirect = alloced[123];
+            memcpy(block_buf, alloced + 124, (total_to_alloc - 124) * sizeof(block_sector_t));
+            block_write(fs_device, disk_inode->indirect, block_buf);
           }
+          if (sectors > 251) {
+            memcpy(disk_inode->direct, alloced, 123 * sizeof(block_sector_t));
+            disk_inode->indirect = alloced[123];
+            memcpy(block_buf, alloced + 124, 128 * sizeof(block_sector_t));
+            block_write(fs_device, disk_inode->indirect, block_buf);
+            disk_inode->doubly_indirect = alloced[252];
+            size_t num_middle_men = DIV_ROUND_UP(DIV_ROUND_UP(sectors - 251, 128), 128);
+            memset(block_buf, 0, BLOCK_SECTOR_SIZE);
+            memcpy(block_buf, alloced + 253, num_middle_men * sizeof(block_sector_t));
+            block_write(fs_device, disk_inode->doubly_indirect, block_buf);
+            size_t remaining_blocks = sectors - 251;
+            for (int i = 0; i < num_middle_men; i++) {
+              block_sector_t middle_man = alloced[253 + i];
+              memset(block_buf, 0, BLOCK_SECTOR_SIZE);
+              if (remaining_blocks => 128)
+                memcpy(block_buf, alloced + 253 + num_middle_men + i * 128, 128 * sizeof(block_sector_t));
+                block_write(fs_device, middle_man, block_buf);
+                remaining_blocks -= 128;
+              if (remaining_blocks < 128)
+                memcpy(block_buf, alloced + 253 + num_middle_men + i * 128, remaining_blocks * sizeof(block_sector_t));
+                block_write(fs_device, middle_man, block_buf);
+                remaining_blocks -= remaining_blocks;
+            }
+          }
+
           block_write (fs_device, sector, disk_inode);
           /* if (sectors > 0)
             {
@@ -163,7 +221,10 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  block_read (fs_device, inode->sector, &inode->data);
+  struct inode_disk disk_inode;
+  block_read (fs_device, inode->sector, &disk_inode);
+  inode->is_dir = disk_inode->is_dir;
+  lock_init(&inode->lock);
   return inode;
 }
 
