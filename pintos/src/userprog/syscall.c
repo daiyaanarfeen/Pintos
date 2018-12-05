@@ -369,97 +369,6 @@ syscall_handler (struct intr_frame *f UNUSED)
         }
       if (readdir_e == list_end (&thread_current ()->files))
         {
-          // lock_release(&file_global_lock);
-          syscall_exit(-1, f);
-        }
-      if (! readdir_fb->is_dir){
-        // lock_release(&file_global_lock);
-        syscall_exit(-1, f);
-      }
-      f->eax = dir_readdir(readdir_fb->dir, readdir_name);
-      break;
-    case SYS_ISDIR:
-      check_valid_ptr ((uint8_t*) args, 0, f);
-      fd = (int) args[1];
-      struct list_elem *isdir_e;
-      struct fs_bundle * isdir_fb = NULL;
-      for (isdir_e = list_begin (&thread_current ()->files); isdir_e != list_end (&thread_current ()->files); 
-           isdir_e = list_next (isdir_e))
-        {         
-          isdir_fb = list_entry (isdir_e, struct fs_bundle, fs_elem);
-          if (isdir_fb->fd == fd) 
-            {
-              break;
-            }
-        }
-      if (isdir_e == list_end (&thread_current ()->files))
-        {
-          // lock_release(&file_global_lock);
-          syscall_exit(-1, f);
-        }
-      f->eax = isdir_fb->is_dir;
-      break;
-    case SYS_INUMBER:
-      check_valid_ptr ((uint8_t*) args, 0, f);
-      fd = (int) args[1];
-      struct list_elem *inum_e;
-      struct fs_bundle * inum_fb = NULL;
-      for (inum_e = list_begin (&thread_current ()->files); inum_e != list_end (&thread_current ()->files); 
-           inum_e = list_next (inum_e))
-        {         
-          inum_fb = list_entry (inum_e, struct fs_bundle, fs_elem);
-          if (inum_fb->fd == fd) 
-            {
-              break;
-            }
-        }
-      if (inum_e == list_end (&thread_current ()->files))
-        {
-          // lock_release(&file_global_lock);
-          syscall_exit(-1, f);
-        }
-      struct inode *inum_inode;
-      if (inum_fb->is_dir){
-        inum_inode = dir_get_inode(inum_fb->dir);
-      } else{
-        inum_inode = file_get_inode(inum_fb->file);
-      }
-      f->eax = inode_get_inumber(inum_inode);
-      break;
-  }
-}
-    case SYS_CHDIR:
-      check_valid_ptr ((uint8_t*) args, 0, f);
-      const char *chdir_dir = (const char *) args[1];
-      check_valid_ptr ((uint8_t*) args, strlen(chdir_dir), f);
-      f->eax = filesys_chdir (chdir_dir);
-      break;
-
-    case SYS_MKDIR:
-      check_valid_ptr ((uint8_t*) args, 0, f);
-      const char *mkdir_dir = (const char *) args[1];
-      check_valid_ptr ((uint8_t*) args, strlen(mkdir_dir), f);
-      f->eax = filesys_mkdir (mkdir_dir);
-      break;
-
-    case SYS_READDIR:
-      check_valid_ptr ((uint8_t*) args, 0, f);
-      fd = (int) args[1];
-      char *readdir_name = (char *) args[2];
-      check_valid_ptr ((uint8_t*) args, strlen(readdir_name) + sizeof(int), f);
-      struct list_elem *readdir_e;
-      struct fs_bundle * readdir_fb = NULL;
-      for (readdir_e = list_begin (&thread_current ()->files); readdir_e != list_end (&thread_current ()->files); 
-           readdir_e = list_next (readdir_e))
-        {         
-          readdir_fb = list_entry (readdir_e, struct fs_bundle, fs_elem);
-          if (readdir_fb->fd == fd) 
-            {
-              break;
-            }
-        }
-      if (readdir_e == list_end (&thread_current ()->files))
-        {
           syscall_exit(-1, f);
         }
       if (! readdir_fb->is_dir){
@@ -515,7 +424,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
   }
 }
-
+    
 /* checks if the region of memeory from addr to addr+range is mapped and part of user memory, if it is not then it kills the process */ 
 void check_valid_ptr (const uint8_t *addr, int range, struct intr_frame *f UNUSED){
   if (!is_user_vaddr (addr) || !is_user_vaddr (addr+range) || 
