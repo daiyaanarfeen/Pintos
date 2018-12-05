@@ -118,6 +118,8 @@ inode_create (block_sector_t sector, off_t length)
 {
   struct inode_disk *disk_inode = NULL;
   bool success = false;
+  static char zeros[BLOCK_SECTOR_SIZE];
+  block_write(fs_device, sector, zeros);
 
   ASSERT (length >= 0);
 
@@ -129,69 +131,23 @@ inode_create (block_sector_t sector, off_t length)
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode != NULL)
     {
-      size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
+      disk_inode->length = 0;
       disk_inode->magic = INODE_MAGIC;
-      size_t total_to_alloc = sectors;
-      if (sectors > 123)
-        total_to_alloc++; //indirect block
-      if (sectors > 251) {
-        total_to_alloc++; //doubly indirect block
-        total_to_alloc += DIV_ROUND_UP(sectors - 251, 128); //middle men
+      block_write(fs_device, sector, disk_inode);
+      struct inode* inode = inode_open(sector);
+      char* buffer;
+      buffer = calloc(length, 1);
+      int size = inode_write_at(inode, buffer, length, 0);
+      if (size == length) {
+        disk_inode->length = length;
+        block_write(fs_device, sector, disk_inode);
+        success = true;
+      } else {
+        inode_remove(inode);
       }
-      block_sector_t alloced[total_to_alloc];
-      if (sectors <= 16635 && allocate_sectors(total_to_alloc, alloced, true))
-        {
-          char block_buf[BLOCK_SECTOR_SIZE] = "";
-          if (sectors <= 123) 
-            memcpy(disk_inode->direct, alloced, sectors * sizeof(block_sector_t));
-          if (sectors > 123 && sectors <= 251) {
-            memcpy(disk_inode->direct, alloced, 123 * sizeof(block_sector_t));
-            disk_inode->indirect = alloced[123];
-            memcpy(block_buf, alloced + 124, (total_to_alloc - 124) * sizeof(block_sector_t));
-            block_write(fs_device, disk_inode->indirect, block_buf);
-          }
-          if (sectors > 251) {
-            memcpy(disk_inode->direct, alloced, 123 * sizeof(block_sector_t));
-            disk_inode->indirect = alloced[123];
-            memcpy(block_buf, alloced + 124, 128 * sizeof(block_sector_t));
-            block_write(fs_device, disk_inode->indirect, block_buf);
-            disk_inode->doubly_indirect = alloced[252];
-            size_t num_middle_men = DIV_ROUND_UP(sectors - 251, 128);
-            memset(block_buf, 0, BLOCK_SECTOR_SIZE);
-            memcpy(block_buf, alloced + 253, num_middle_men * sizeof(block_sector_t));
-            block_write(fs_device, disk_inode->doubly_indirect, block_buf);
-            size_t remaining_blocks = sectors - 251;
-            size_t i;
-            for (i = 0; i < num_middle_men; i++) {
-              block_sector_t middle_man = alloced[253 + i];
-              memset(block_buf, 0, BLOCK_SECTOR_SIZE);
-              if (remaining_blocks >= 128) {
-                memcpy(block_buf, alloced + 253 + num_middle_men + i * 128, 128 * sizeof(block_sector_t));
-                block_write(fs_device, middle_man, block_buf);
-                remaining_blocks -= 128;
-              }
-              if (remaining_blocks < 128) {
-                memcpy(block_buf, alloced + 253 + num_middle_men + i * 128, remaining_blocks * sizeof(block_sector_t));
-                block_write(fs_device, middle_man, block_buf);
-                remaining_blocks -= remaining_blocks;
-              }
-            }
-          }
-
-          block_write (fs_device, sector, disk_inode);
-          /* if (sectors > 0)
-            {
-              static char zeros[BLOCK_SECTOR_SIZE];
-              size_t i;
-
-              for (i = 0; i < sectors; i++)
-                block_write (fs_device, disk_inode->start + i, zeros);
-            } */
-          success = true;
-        }
-      free (disk_inode);
+      inode_close(inode);
     }
+  free (disk_inode);
   return success;
 }
 
