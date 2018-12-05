@@ -140,7 +140,7 @@ inode_create (block_sector_t sector, off_t length)
         total_to_alloc += DIV_ROUND_UP(sectors - 251, 128); //middle men
       }
       block_sector_t alloced[total_to_alloc];
-      if (allocate_sectors(total_to_alloc, alloced, true))
+      if (sectors <= 16635 && allocate_sectors(total_to_alloc, alloced, true))
         {
           char block_buf[BLOCK_SECTOR_SIZE] = "";
           if (sectors <= 123) 
@@ -399,8 +399,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     size_t need_data_sectors = bytes_to_sectors(size + offset);
     size_t need_total_sectors = need_data_sectors <= 123 ? need_data_sectors : (need_data_sectors <= 251 ? need_data_sectors + 1 : need_data_sectors + 2 + DIV_ROUND_UP(need_data_sectors - 251, 128));
     size_t to_alloc = need_total_sectors - cur_total_sectors;
-    block_sector_t new_blocks[need_total_sectors];
-    size_t num_new_blocks = allocate_sectors(to_alloc, new_blocks + cur_total_sectors, false);
+    block_sector_t new_blocks[to_alloc];
+    size_t num_new_blocks = allocate_sectors(to_alloc, new_blocks, false);
     
     struct inode_disk disk_inode;
     block_read(fs_device, inode->sector, &disk_inode);
