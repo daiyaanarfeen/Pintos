@@ -14,6 +14,7 @@
 #include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "filesys/directory.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -101,6 +102,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->cwd = NULL;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -207,6 +209,12 @@ thread_create (const char *name, int priority,
   list_push_back (&par_thread->children, &pb->elem);
 
   /* End of Task 2 */
+
+  if (par_thread->cwd != NULL){
+    t->cwd = dir_reopen(par_thread->cwd);
+  } else{
+    t->cwd = NULL;
+  }
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);

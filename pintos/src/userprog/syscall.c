@@ -12,6 +12,8 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
+#include "filesys/directory.h"
 
 /* A lock is needed since multiply processes may mess around with the same file at the same time. */
 struct lock file_global_lock;
@@ -95,7 +97,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       else 
         {
           off_t initial_size = (off_t) args[2];
-          f->eax = filesys_create (create_name,initial_size);	
+          f->eax = filesys_create (create_name, initial_size, false);	
         }
       lock_release (&file_global_lock);
       break;
@@ -103,7 +105,12 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_REMOVE:
       lock_acquire (&file_global_lock);
       const char *remove_name = (const char *) args[1];
-      f->eax = filesys_remove (remove_name);
+      /* cannot remove root */
+      if (strcmp(remove_name, "/")==0 && strlen(remove_name) == 1){
+        f->eax = false;
+      } else{
+        f->eax = filesys_remove (remove_name);
+      }
       lock_release (&file_global_lock);
       break;
     /* System Call: int open (const char *file) */
@@ -112,10 +119,20 @@ syscall_handler (struct intr_frame *f UNUSED)
       check_valid_ptr_with_lock ((uint8_t *) args, 8, f, &file_global_lock);
       const char *open_name = (const char *) args[1];
       check_valid_ptr_with_lock ((uint8_t*) open_name, 0, f, &file_global_lock);
-      struct file* fp = filesys_open (open_name);
-      if (fp)
-        {
-          /* opens the file in the file system and wraps it in the fs_bundle needed to store info for other syscalls */
+      struct inode* inode = filesys_open_inode (open_name);
+      if (!inode){
+        f->eax = -1;
+      } else{
+        struct file *fp = NULL;
+        struct dir *dir = NULL;
+        /* if we are trying to open a file */
+        if (!inode_is_dir(inode)){
+          fp = filesys_open(open_name);
+        }
+        else {
+          dir = dir_open(inode);
+        }
+        if (fp || dir){
           struct thread *t = thread_current ();
           struct fs_bundle * fb = (struct fs_bundle *)malloc(sizeof(struct fs_bundle));
           char* copier = (char*) malloc (strlen(open_name) + 1);
@@ -123,16 +140,21 @@ syscall_handler (struct intr_frame *f UNUSED)
           fb->filename = copier;
           fb->fd = t->next_fd;
           t->next_fd ++;
-          fb->file = fp;
+          if (fp){
+            fb->file = fp;
+            fb->is_dir = false;
+          } else{
+            fb->dir = dir;
+            fb->is_dir = true;
+          }
           list_push_back (&t->files, &fb->fs_elem);
           list_push_back (&all_files, &fb->global_elem);
           f->eax = fb->fd;
-        } 
-      else
-        {
-          /* return -1 if file cannot be opned */
-          f->eax = -1;
+        } else{
+          lock_release(&file_global_lock);
+          syscall_exit(-1, f);
         }
+      }
       lock_release (&file_global_lock);
       break;
     /* System Call: int filesize (int fd) */
@@ -196,6 +218,10 @@ syscall_handler (struct intr_frame *f UNUSED)
               lock_release (&file_global_lock);
               syscall_exit (-1, f);
             }
+          /* should not read a directory */
+          if (fb->is_dir){
+            syscall_exit(-1, f);
+          }
           size = file_read (fb->file, buf, size);
           f->eax = size; 
         }
@@ -233,6 +259,10 @@ syscall_handler (struct intr_frame *f UNUSED)
             }
           if (e == list_end(&thread_current ()->files))
             syscall_exit(-1, f);
+          /* should not write to directory */
+          if (fb->is_dir){
+            syscall_exit(-1, f);
+          }
           struct thread* t;
           /* rox implementation, check to see the file is not the executable of a running process */
           int deny = 0;
@@ -331,11 +361,101 @@ syscall_handler (struct intr_frame *f UNUSED)
         list_remove (e); 
         list_remove (e);
         free (fb);
-      }  
+      }
       lock_release (&file_global_lock);
       break;
-    }
-}   
+
+    case SYS_CHDIR:
+      check_valid_ptr ((uint8_t*) args, 0, f);
+      const char *chdir_dir = (const char *) args[1];
+      check_valid_ptr ((uint8_t*) args, strlen(chdir_dir), f);
+      f->eax = filesys_chdir (chdir_dir);
+      break;
+
+    case SYS_MKDIR:
+      check_valid_ptr ((uint8_t*) args, 0, f);
+      const char *mkdir_dir = (const char *) args[1];
+      check_valid_ptr ((uint8_t*) args, strlen(mkdir_dir), f);
+      f->eax = filesys_mkdir (mkdir_dir);
+      break;
+
+    case SYS_READDIR:
+      check_valid_ptr ((uint8_t*) args, 0, f);
+      fd = (int) args[1];
+      char *readdir_name = (char *) args[2];
+      check_valid_ptr ((uint8_t*) args, strlen(readdir_name) + sizeof(int), f);
+      struct list_elem *readdir_e;
+      struct fs_bundle * readdir_fb = NULL;
+      for (readdir_e = list_begin (&thread_current ()->files); readdir_e != list_end (&thread_current ()->files); 
+           readdir_e = list_next (readdir_e))
+        {         
+          readdir_fb = list_entry (readdir_e, struct fs_bundle, fs_elem);
+          if (readdir_fb->fd == fd) 
+            {
+              break;
+            }
+        }
+      if (readdir_e == list_end (&thread_current ()->files))
+        {
+          // lock_release(&file_global_lock);
+          syscall_exit(-1, f);
+        }
+      if (! readdir_fb->is_dir){
+        // lock_release(&file_global_lock);
+        syscall_exit(-1, f);
+      }
+      f->eax = dir_readdir(readdir_fb->dir, readdir_name);
+      break;
+    case SYS_ISDIR:
+      check_valid_ptr ((uint8_t*) args, 0, f);
+      fd = (int) args[1];
+      struct list_elem *isdir_e;
+      struct fs_bundle * isdir_fb = NULL;
+      for (isdir_e = list_begin (&thread_current ()->files); isdir_e != list_end (&thread_current ()->files); 
+           isdir_e = list_next (isdir_e))
+        {         
+          isdir_fb = list_entry (isdir_e, struct fs_bundle, fs_elem);
+          if (isdir_fb->fd == fd) 
+            {
+              break;
+            }
+        }
+      if (isdir_e == list_end (&thread_current ()->files))
+        {
+          // lock_release(&file_global_lock);
+          syscall_exit(-1, f);
+        }
+      f->eax = isdir_fb->is_dir;
+      break;
+    case SYS_INUMBER:
+      check_valid_ptr ((uint8_t*) args, 0, f);
+      fd = (int) args[1];
+      struct list_elem *inum_e;
+      struct fs_bundle * inum_fb = NULL;
+      for (inum_e = list_begin (&thread_current ()->files); inum_e != list_end (&thread_current ()->files); 
+           inum_e = list_next (inum_e))
+        {         
+          inum_fb = list_entry (inum_e, struct fs_bundle, fs_elem);
+          if (inum_fb->fd == fd) 
+            {
+              break;
+            }
+        }
+      if (inum_e == list_end (&thread_current ()->files))
+        {
+          // lock_release(&file_global_lock);
+          syscall_exit(-1, f);
+        }
+      struct inode *inum_inode;
+      if (inum_fb->is_dir){
+        inum_inode = dir_get_inode(inum_fb->dir);
+      } else{
+        inum_inode = file_get_inode(inum_fb->file);
+      }
+      f->eax = inode_get_inumber(inum_inode);
+      break;
+  }
+}
 
 /* checks if the region of memeory from addr to addr+range is mapped and part of user memory, if it is not then it kills the process */ 
 void check_valid_ptr (const uint8_t *addr, int range, struct intr_frame *f UNUSED){

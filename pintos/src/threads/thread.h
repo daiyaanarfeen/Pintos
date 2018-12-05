@@ -110,7 +110,8 @@ struct thread
     struct list files; /* Use this list to keep track of all files*/
     int next_fd;  /* Keep track of the next available file descriptor to use */
 #endif
-
+    
+    struct dir *cwd;     /* Current working directory */
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
