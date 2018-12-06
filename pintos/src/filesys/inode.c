@@ -414,7 +414,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     free(new_blocks);
     size = cur_data_sectors < need_data_sectors ? inode_length(inode) - offset : size;
   }
-  lock_release(&inode->lock);
 
   while (size > 0)
     {
@@ -440,6 +439,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       bytes_written += chunk_size;
     }
   
+  lock_release(&inode->lock);
   return bytes_written;
 }
 
