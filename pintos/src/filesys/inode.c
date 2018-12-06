@@ -22,8 +22,6 @@ struct inode_disk
     block_sector_t doubly_indirect;
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[124];               /* Not used. */
-    char temp[3];
     bool is_dir;                        /* Whether the inode is dir or file. */
   };
 
@@ -130,7 +128,6 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
 
   /* If this assertion fails, the inode structure is not exactly
      one sector in size, and you should fix that. */
-  printf("%d", sizeof *disk_inode);
   ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
 
   disk_inode = calloc (1, sizeof *disk_inode);
