@@ -8,6 +8,8 @@ struct fs_bundle
   {
   	const char *filename;  /* The file name used to open the file */
   	int fd;			/* The underlying file descriptor */
+  	bool is_dir;    /* Whether the fs_bundle corresponds to a directory */
+  	struct dir *dir;  /* If is_dir, store the dir pointer. */
   	struct file *file;		/* The underlying file struct */
   	struct list_elem fs_elem; 	/* Element for the files list in thread.c */
   	struct list_elem global_elem; /* Element for the file_global_list in syscall.c */

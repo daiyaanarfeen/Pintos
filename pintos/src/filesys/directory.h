@@ -23,8 +23,13 @@ struct inode *dir_get_inode (struct dir *);
 
 /* Reading and writing. */
 bool dir_lookup (const struct dir *, const char *name, struct inode **);
-bool dir_add (struct dir *, const char *name, block_sector_t);
+bool dir_add (struct dir *, const char *name, block_sector_t, bool is_dir);
 bool dir_remove (struct dir *, const char *name);
 bool dir_readdir (struct dir *, char name[NAME_MAX + 1]);
+
+/* Helper functions. */
+struct dir *open_dir_by_path(const char *path);
+char *get_file_name_from_path(const char *path);
+bool dir_is_empty(struct inode *inode);
 
 #endif /* filesys/directory.h */

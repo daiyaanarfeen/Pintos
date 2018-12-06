@@ -111,6 +111,9 @@ start_process (void *file_name_)
       struct process_bundle *parent = thread_current ()->parent;
       parent->loaded = true;
       sema_up(&(parent->sem));
+      if (!thread_current()->cwd){
+        thread_current()->cwd = dir_open_root();
+      }
     }
 
   /* Start the user process by simulating a return from an
@@ -227,6 +230,9 @@ process_exit (void)
       /* Call sema_up on the bundle semaphore */
       sema_up (&par->sem);
     }
+  if (cur->cwd){
+    dir_close(cur->cwd);
+  }
 
 }
 
@@ -423,7 +429,7 @@ load (const char *file_info, void (**eip) (void), void **esp)
           break;
         }
     }
-
+  thread_current()->cwd = dir_open_root();
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
