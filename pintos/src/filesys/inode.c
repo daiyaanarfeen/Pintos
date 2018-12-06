@@ -126,7 +126,6 @@ inode_create (block_sector_t sector, off_t length)
 
   /* If this assertion fails, the inode structure is not exactly
      one sector in size, and you should fix that. */
-  printf("%d", sizeof *disk_inode);
   ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
 
   disk_inode = calloc (1, sizeof *disk_inode);
@@ -244,17 +243,17 @@ inode_close (struct inode *inode)
               block += (total - 123 < 128 ? total - 123 : 128);
               free_map_release(disk_inode.indirect, 1);
             } else if (block >= 251) {
-              block_sector_t dbl_ind[128];
-              block_read(fs_device, disk_inode.doubly_indirect, dbl_ind);
+              block_sector_t buf_block[128];
               int mdl_man;
               for (mdl_man = 0; mdl_man < (DIV_ROUND_UP(total - 251, 128)); mdl_man++) {
-                block_sector_t mdl_block[128];
-                block_read(fs_device, dbl_ind[mdl_man], mdl_block);
+                block_read(fs_device, disk_inode.doubly_indirect, buf_block);
+                block_sector_t to_release = buf_block[mdl_man];
+                block_read(fs_device, to_release, buf_block);
                 int i;
                 for (i = 0; i < (total - block > 128 ? 128 : total - block); i++)
-                  free_map_release(mdl_block[i], 1);
+                  free_map_release(buf_block[i], 1);
                 block += (total - block > 128 ? 128 : total - block);
-                free_map_release(dbl_ind[mdl_man], 1);
+                free_map_release(to_release, 1);
               }
               free_map_release(disk_inode.doubly_indirect, 1);
             }
@@ -419,7 +418,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
         block_write(fs_device, disk_inode->doubly_indirect, dbl_ind_block);
       }
     }
-    disk_inode->length = cur_data_sectors * BLOCK_SECTOR_SIZE;
+    disk_inode->length = (cur_data_sectors < need_data_sectors ? cur_data_sectors * BLOCK_SECTOR_SIZE : offset + size);
     block_write(fs_device, inode->sector, disk_inode);
     free(disk_inode);
     free(new_blocks);
