@@ -328,8 +328,13 @@ syscall_handler (struct intr_frame *f UNUSED)
           {
             syscall_exit (-1, f);
           }
-        /* close the file, free the fs_bundle */
-        file_close (fb->file);
+        /* trying to close the dir */
+        if (fb->is_dir){
+          dir_close(fb->dir);
+        } else{
+          /* close the file, free the fs_bundle */
+          file_close (fb->file);
+        }       
         free ((void*)fb->filename);
         list_remove (e); 
         list_remove (e);

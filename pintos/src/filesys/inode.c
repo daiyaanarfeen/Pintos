@@ -78,6 +78,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
     free(disk_inode);
     return sect;
   } else {
+    free(disk_inode);
     return -1;
   }
 }

@@ -8,6 +8,7 @@
 #include "filesys/directory.h"
 #include "filesys/cache.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -65,7 +66,7 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
   if (!success && inode_sector != 0)
     free_map_release (inode_sector, 1);
   dir_close (dir);
-
+  free(file_name);
   return success;
 }
 
@@ -90,7 +91,7 @@ filesys_open (const char *name)
   if (dir != NULL)
     dir_lookup (dir, file_name, &inode);
   dir_close (dir);
-
+  free(file_name);
   return file_open (inode);
 }
 
@@ -120,7 +121,7 @@ filesys_open_inode (const char *name)
   if (dir != NULL)
     dir_lookup (dir, file_name, &inode);
   dir_close (dir);
-
+  free(file_name);
   return inode;
 }
 
@@ -135,6 +136,7 @@ filesys_remove (const char *name)
   struct dir *dir = open_dir_by_path(name);
   bool success = dir != NULL && dir_remove (dir,file_name);
   dir_close (dir);
+  free(file_name);
   return success;
 }
 
@@ -160,10 +162,12 @@ filesys_chdir (const char *dir)
   struct inode *inode = NULL;
   if (! dir_lookup(chdir, name, &inode)){
     dir_close(chdir);
+    free(name);
     return false;
   }
   dir_close(thread_current()->cwd);
   thread_current()->cwd = dir_open(inode);
+  free(name);
   return true;
 }
 
@@ -191,6 +195,7 @@ filesys_mkdir (const char *name)
       free_map_release (inode_sector, 1);
     }
     dir_close (dir);
+    free(file_name);
     return false;
   }
   /*end of borrowing */
@@ -202,6 +207,7 @@ filesys_mkdir (const char *name)
     dir_remove(dir, file_name);
   }
   dir_close(dir);
+  free(file_name);
   return success;
 }
 
