@@ -106,9 +106,9 @@ filesys_open_inode (const char *name)
     return NULL;
   }
   if (strcmp(name, "/") == 0 && strlen(name) == 1){
-    struct inode *root = dir_open_root();
-    inode_set_is_dir(root, true);
-    return root;
+    struct dir *root = dir_open_root();
+    inode_set_is_dir(root->inode, true);
+    return root->inode;
   }
   char *file_name = get_file_name_from_path(name);
   if (file_name == NULL){
@@ -183,8 +183,8 @@ filesys_mkdir (const char *name)
   bool success = (dir != NULL
                   && file_name != NULL
                   && free_map_allocate (1, &inode_sector)
-                  // start with 16 entries in dir
-                  && dir_create (inode_sector, 16)
+                  // start with 0 entries in dir
+                  && dir_create (inode_sector, 0)
                   && dir_add (dir, file_name, inode_sector, is_dir));
   if (!success){
     if (inode_sector != 0){
@@ -211,7 +211,7 @@ do_format (void)
 {
   printf ("Formatting file system...");
   free_map_create ();
-  if (!dir_create (ROOT_DIR_SECTOR, 16))
+  if (!dir_create (ROOT_DIR_SECTOR, 0))
     PANIC ("root directory creation failed");
   
   struct dir *dir = dir_open_root();

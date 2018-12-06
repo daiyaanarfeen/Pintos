@@ -73,7 +73,7 @@ byte_to_sector (const struct inode *inode, off_t pos)
       cache_read(disk_inode->doubly_indirect, block);
       block_sector_t middle_man = block[DIV_ROUND_UP(sector - 251, 128) - 1];
       cache_read(middle_man, block);
-      sect = block[((sector - 251) % 128) - 1];
+      sect = block[((sector - 251 - 1) % 128)];
     }
     free(disk_inode);
     return sect;
@@ -119,6 +119,7 @@ allocate_sectors(size_t sectors, block_sector_t* alloced, bool strict)
 bool
 inode_create (block_sector_t sector, off_t length, bool is_dir)
 {
+  
   struct inode_disk *disk_inode = NULL;
   bool success = false;
   static char zeros[BLOCK_SECTOR_SIZE];
@@ -376,6 +377,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
           } else {
             free_map_release(new_blocks[blocks_added], 1);
             blocks_added = num_new_blocks;
+            break;
           }
         }
         block_sector_t dbl_ind_block[128];
@@ -392,13 +394,15 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
               break;
             }
           }
-          cache_read(dbl_ind_block[mdl_man], middle_man);
-          memcpy(middle_man + ((cur_data_sectors - 251) % 128) , new_blocks + blocks_added, (128 - ((cur_data_sectors - 251) % 128)) * sizeof(block_sector_t));
-          cache_write(dbl_ind_block[mdl_man], middle_man);
-          size_t iter_blocks = (128 - ((cur_data_sectors - 251) % 128));
-          cur_data_sectors += iter_blocks;
-          blocks_added += iter_blocks;
-          mdl_man += 1;
+          if (blocks_added != num_new_blocks) {
+            cache_read(dbl_ind_block[mdl_man], middle_man);
+            memcpy(middle_man + ((cur_data_sectors - 251) % 128) , new_blocks + blocks_added, (128 - ((cur_data_sectors - 251) % 128)) * sizeof(block_sector_t));
+            cache_write(dbl_ind_block[mdl_man], middle_man);
+            size_t iter_blocks = (128 - ((cur_data_sectors - 251) % 128));
+            cur_data_sectors += iter_blocks;
+            blocks_added += iter_blocks;
+            mdl_man += 1;
+          }
         }
         cache_write(disk_inode->doubly_indirect, dbl_ind_block);
       }
