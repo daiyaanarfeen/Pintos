@@ -17,7 +17,6 @@
    Must be exactly BLOCK_SECTOR_SIZE=512 bytes long. */
 struct inode_disk
   {
-    bool is_dir;
     block_sector_t direct[123];
     block_sector_t indirect;
     block_sector_t doubly_indirect;
@@ -44,7 +43,6 @@ struct inode
     block_sector_t sector;              /* Sector number of disk location. */
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
-    bool is_dir;
 
     struct lock deny_lock;
     struct condition write_allowed;
