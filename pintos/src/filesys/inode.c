@@ -293,6 +293,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     {
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      if (sector_idx == -1)
+        break;
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -414,7 +416,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     free(new_blocks);
     size = cur_data_sectors < need_data_sectors ? inode_length(inode) - offset : size;
   }
-
+  
   while (size > 0)
     {
       /* Sector to write, starting byte offset within sector. */
