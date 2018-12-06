@@ -165,6 +165,7 @@ filesys_chdir (const char *dir)
     free(name);
     return false;
   }
+  dir_close(chdir);
   dir_close(thread_current()->cwd);
   thread_current()->cwd = dir_open(inode);
   free(name);

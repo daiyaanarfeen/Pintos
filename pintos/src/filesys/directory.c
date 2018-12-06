@@ -261,7 +261,7 @@ dir_remove (struct dir *dir, const char *name)
     goto done;
 
   if (inode_is_dir(inode)){
-    if (inode_open_cnt(inode) >= 2  || !dir_is_empty(inode))
+    if (inode_open_cnt(inode) > 1  || !dir_is_empty(inode))
       goto done;
   }
 
